@@ -55,8 +55,8 @@
           if (!row || row.length === 0) continue;
 
           let col0 = row[0] ? String(row[0]).trim() : "";
-          let pro = parseInt(row[1]) || 0;
-          let cit = parseInt(row[2]) || 0;
+          let val1 = row[1] !== undefined ? row[1] : null;
+          let val2 = row[2] !== undefined ? row[2] : null;
 
           if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila")) continue;
 
@@ -67,38 +67,38 @@
             continue;
           }
 
-          // 2. Detectar Horario (ej. 12:00 - 18:00)
-          if (col0.includes(" - ") || col0.includes(":")) {
+          // 2. Detectar Horario (ej. 08:00 - 12:00)
+          if (col0.match(/\d{2}:\d{2}/)) {
             currHorario = col0;
             continue;
           }
 
-          // 3. Fila de Datos de Actividad (Tiene números en PRO y CIT)
-          if (row[1] !== undefined && row[2] !== undefined && (pro > 0 || cit > 0 || row[1] === 0)) {
-            resultado.push({
-              fecha: currFecha,
-              medico: currMedico,
-              horario: currHorario,
-              especialidad: currEsp,
-              actividad: col0,
-              pro: pro,
-              cit: cit
-            });
-            continue;
-          }
+          // 3. Fila de Sub Actividad (Tiene valores numéricos en PRO y CIT)
+          if (val1 !== null && val2 !== null && (!isNaN(val1) || !isNaN(val2))) {
+            let pro = parseInt(val1) || 0;
+            let cit = parseInt(val2) || 0;
 
-          // 4. Jerarquía de Médico vs Especialidad
-          // Si son letras mayúsculas sin números, determinar si es Especialidad o Médico
-          if (col0 === col0.toUpperCase() && !col0.includes(" - ")) {
-            if (
-              col0.includes("MEDICINA") || col0.includes("CIRUGIA") || col0.includes("PEDIATRIA") || 
-              col0.includes("OFTALMOLOGIA") || col0.includes("GINECOLOGIA") || col0.includes("DERMATOLOGIA") || 
-              col0.includes("GERIATRIA") || col0.includes("OTORRINOLARINGOLOGIA") || col0.includes("UROLOGIA") ||
-              col0.includes("ANESTESIA") || col0.includes("NEUROLOGIA") || col0.includes("NEUMOLOGIA") ||
-              col0.includes("GASTROENTEROLOGIA") || col0.includes("ORTOPEDIA") || col0.includes("MEDICO")
-            ) {
+            if (pro > 0 || cit > 0) {
+              resultado.push({
+                fecha: currFecha,
+                medico: currMedico,
+                horario: currHorario,
+                especialidad: currEsp,
+                actividad: col0, // Sub actividad
+                pro: pro,
+                cit: cit
+              });
+            }
+          } else {
+            // Si NO tiene números:
+            // Si la fila anterior era un horario, este texto corresponde a la Especialidad
+            let rowPrev = rows[i-1];
+            let col0Prev = (rowPrev && rowPrev[0]) ? String(rowPrev[0]).trim() : "";
+            
+            if (col0Prev.match(/\d{2}:\d{2}/)) {
               currEsp = col0;
             } else {
+              // Si no viene después de un horario, es el nombre del Médico
               currMedico = col0;
             }
           }
@@ -123,7 +123,7 @@
       localStorage.setItem('gh_token', token);
 
       status.style.color = "blue";
-      status.innerText = "⏳ Subiendo datos...";
+      status.innerText = "⏳ Procesando datos...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -142,9 +142,9 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos actualizados exitosamente en el aplicativo!";
+          status.innerText = "✅ ¡Datos ordenados correctamente!";
         } else {
-          throw new Error("Error en la respuesta del servidor");
+          throw new Error("Error en la respuesta de GitHub");
         }
       })
       .catch(err => {
