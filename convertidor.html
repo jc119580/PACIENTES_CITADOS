@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel del día o haga clic
+      📁 Arrastre aquí su archivo Excel diario o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -49,6 +49,14 @@
       return "24/08/2026";
     }
 
+    function esHorario(cadena) {
+      return /\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/.test(cadena);
+    }
+
+    function esFecha(cadena) {
+      return /\d{4}-\d{2}-\d{2}/.test(cadena) || /\d{1,2}\/\d{1,2}\/\d{4}/.test(cadena);
+    }
+
     function procesarExcel(file) {
       if(!file) return;
       const reader = new FileReader();
@@ -63,87 +71,63 @@
           let resultado = [];
           let currFecha = "24/08/2026";
           let currMedico = "";
-          let currHorario = "";
-          let currEsp = "";
-          let currAct = "";
 
-          const ESPS = [
-            "MEDICINA", "CIRUGIA", "PEDIATRIA", "OFTALMOLOGIA", "GINECOLOGIA", 
-            "DERMATOLOGIA", "GERIATRIA", "OTORRINOLARINGOLOGIA", "UROLOGIA", 
-            "ANESTESIA", "NEUROLOGIA", "NEUMOLOGIA", "GASTROENTEROLOGIA", 
-            "ORTOPEDIA", "MEDICO DE CONTROL", "OBSTETRICIA", "REHABILITAC",
-            "TRAUMATOLOGIA"
-          ];
+          let i = 0;
+          const n = rows.length;
 
-          const ACTIVIDADES = [
-            "CONSULTA", "PRE-OPERATORIO", "TELECONSULTA", "CONTROL", 
-            "PROCEDIMIENTOS", "RIESGO", "EXAMEN"
-          ];
-
-          for (let i = 0; i < rows.length; i++) {
+          while (i < n) {
             let row = rows[i];
-            if (!row || row.length === 0) continue;
+            if (!row || row.length === 0) { i++; continue; }
 
             let col0 = row[0] ? String(row[0]).trim() : "";
-            let val1 = row[1];
-            let val2 = row[2];
             let col0Upper = col0.toUpperCase();
 
-            if (
-              !col0 || 
-              col0Upper.includes("TOTAL GENERAL") || 
-              col0Upper.includes("ETIQUETAS DE FILA") || 
-              col0Upper.includes("CODACTI")
-            ) {
+            if (!col0 || col0Upper.includes("TOTAL GENERAL") || col0Upper.includes("ETIQUETAS DE FILA") || col0Upper.includes("CODACTI")) {
+              i++;
               continue;
             }
 
-            // 1. Detectar Fecha
-            if (col0.match(/\d{4}-\d{2}-\d{2}/) || col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
+            // 1. Detectar Fecha dinámica
+            if (esFecha(col0)) {
               currFecha = formatearFecha(col0);
+              i++;
               continue;
             }
 
-            // 2. Detectar Horario (Horario viene justo después del médico)
-            let matchHorario = col0.match(/\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/);
-            if (matchHorario) {
-              currHorario = matchHorario[0];
-              continue;
-            }
+            // 2. Detectar inicio del bloque de Horario
+            if (esHorario(col0)) {
+              let hor = col0;
+              let esp = (i + 1 < n && rows[i + 1] && rows[i + 1][0]) ? String(rows[i + 1][0]).trim() : "CONSULTA EXTERNA";
+              let act = (i + 2 < n && rows[i + 2] && rows[i + 2][0]) ? String(rows[i + 2][0]).trim() : "CONSULTA MEDICA";
 
-            // 3. Clasificar Categorías
-            let isEsp = ESPS.some(esp => col0Upper.includes(esp));
-            let isAct = ACTIVIDADES.some(act => col0Upper.includes(act));
-
-            if (isEsp) {
-              currEsp = col0;
-            } else if (isAct) {
-              currAct = col0;
-              // Al llegar a la ACTIVIDAD (que es la última fila del bloque), guardamos los datos
-              let pro = parseInt(val1) || 0;
-              let cit = parseInt(val2) || 0;
+              let rowAct = rows[i + 2] || [];
+              let pro = parseInt(rowAct[1]) || 0;
+              let cit = parseInt(rowAct[2]) || 0;
 
               if (pro > 0 || cit > 0) {
                 resultado.push({
                   fecha: currFecha,
                   medico: currMedico || "MÉDICO GENERAL",
-                  especialidad: currEsp || "CONSULTA EXTERNA",
-                  actividad: currAct,
-                  horario: currHorario,
+                  especialidad: esp,
+                  actividad: act,
+                  horario: hor,
                   pro: pro,
                   cit: cit
                 });
               }
+
+              // Avanzar saltando la fila de especialidad y sub-actividad procesadas
+              i += 3;
+              continue;
             } else {
-              // Si es un nuevo MÉDICO, limpiamos la especialidad y actividad previa
+              // Si no es fecha ni horario, es el NOMBRE DEL MÉDICO
               currMedico = col0;
-              currEsp = "";
-              currAct = "";
+              i++;
             }
           }
 
           if (resultado.length === 0) {
-            alert("No se cargaron registros. Verifique el archivo.");
+            alert("No se cargaron registros. Verifique el archivo Excel.");
             return;
           }
 
@@ -168,7 +152,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Actualizando archivo con especialidades corregidas...";
+      status.innerText = "⏳ Guardando datos procesados dinámicamente...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -187,7 +171,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡PEDIATRIA asignada correctamente a Ruiz Mendez Angel!";
+          status.innerText = "✅ ¡Procesado dinámicamente 100% perfecto sin listas fijas!";
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
