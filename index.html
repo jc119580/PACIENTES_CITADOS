@@ -2,155 +2,305 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Convertidor de Pacientes Citados - Hospital Albrecht</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Pacientes Citados - Hospital Albrecht</title>
+
   <style>
-    body { font-family: sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
-    .card { background: white; max-width: 500px; margin: auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .drop-zone { border: 2px dashed #1a237e; border-radius: 8px; padding: 25px; cursor: pointer; background: #e8eaf6; color: #1a237e; font-weight: bold; margin: 15px 0; }
-    input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 6px 0 12px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-    #status { margin-top: 15px; font-weight: bold; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #f0f2f5; color: #333; }
+    
+    #login-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(26, 35, 126, 0.95); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(5px); }
+    .login-card { background: white; padding: 28px 20px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); text-align: center; }
+    .login-card h3 { margin-top: 0; color: #1a237e; font-size: 18px; margin-bottom: 4px; }
+    .login-card input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #CED4DA; border-radius: 8px; font-size: 14px; box-sizing: border-box; outline: none; }
+    .btn-login { width: 100%; padding: 12px; background: #1a237e; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; margin-top: 10px; }
+    #login-error { color: #DC3545; font-size: 12px; font-weight: bold; margin-top: 10px; display: none; }
+
+    header { background: #1a237e; color: white; padding: 12px 16px; font-size: 16px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+    .container { padding: 12px; max-width: 1000px; margin: auto; }
+    
+    .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+    .metric-card { background: white; border-radius: 10px; padding: 10px 6px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-bottom: 4px solid #1a237e; }
+    .metric-card.faltan { border-bottom-color: #d32f2f; background: #fff8f8; }
+    .metric-card.completos { border-bottom-color: #2e7d32; }
+    .metric-card.incompletos { border-bottom-color: #f57f17; background: #fffde7; }
+    .metric-val { font-size: 20px; font-weight: 800; color: #1a237e; line-height: 1.1; }
+    .metric-card.faltan .metric-val { color: #c62828; }
+    .metric-lbl { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: #555; margin-top: 4px; }
+
+    @media (max-width: 500px) {
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    }
+
+    .filter-card { background: white; border-radius: 10px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 8px; }
+    .filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .filter-item { flex: 1; min-width: 140px; }
+    .filter-item label { font-size: 11px; font-weight: bold; color: #1a237e; display: block; margin-bottom: 4px; }
+    .filter-item select, .filter-item input { width: 100%; padding: 9px; border-radius: 6px; border: 1px solid #c5cae9; font-size: 13px; outline: none; background: white; }
+
+    .item-card { background: white; border-radius: 10px; border: 1px solid #e0e0e0; border-left: 6px solid #f57f17; margin-bottom: 10px; padding: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.04); }
+    .item-card.COMPLETO { border-left-color: #2e7d32; }
+    
+    .item-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+    .item-title { font-size: 14px; font-weight: bold; color: #1a237e; text-transform: uppercase; }
+    .item-sub { font-size: 11.5px; color: #555; margin-top: 2px; }
+    
+    .badge-estado { padding: 4px 8px; border-radius: 12px; font-size: 10.5px; font-weight: bold; text-transform: uppercase; }
+    .badge-estado.INCOMPLETO { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    .badge-estado.COMPLETO { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+
+    .item-info { font-size: 12px; color: #444; line-height: 1.5; margin-top: 6px; background: #f8f9fa; padding: 8px; border-radius: 6px; border: 1px solid #f0f0f0; }
+    .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 4px; }
+
+    .progress-bar-bg { background: #e0e0e0; border-radius: 10px; height: 12px; width: 100%; margin-top: 8px; overflow: hidden; }
+    .progress-bar-fill { background: linear-gradient(90deg, #f57f17, #fbc02d); height: 100%; border-radius: 10px; transition: width 0.3s; }
+    .progress-bar-fill.completo { background: linear-gradient(90deg, #2e7d32, #43a047); }
+    
+    .progress-text { display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: #444; margin-top: 4px; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>📤 Convertidor de Pacientes Citados</h2>
-    <p style="font-size: 12px; color: #555;">Suba la tabla dinámica exportada de Excel para actualizar el aplicativo.</p>
-    
-    <label style="font-size:11px; font-weight:bold; float:left;">GitHub Token:</label>
-    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx">
-    
-    <label style="font-size:11px; font-weight:bold; float:left;">Gist ID:</label>
-    <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
-    <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel del día o haga clic
-      <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
+  <div id="login-overlay">
+    <div class="login-card">
+      <h3>🏥 PACIENTES CITADOS</h3>
+      <p style="font-size:12px; color:#6C757D; margin-bottom:15px;">Hospital I Albrecht — EsSalud</p>
+      <input type="text" id="userInput" placeholder="👤 Usuario (DNI)">
+      <input type="password" id="passInput" placeholder="🔑 Contraseña (DNI)" onkeyup="if(event.key === 'Enter') iniciarSesion()">
+      <button class="btn-login" onclick="iniciarSesion()">INGRESAR AL SISTEMA</button>
+      <div id="login-error">DNI o Contraseña incorrectos</div>
+    </div>
+  </div>
+
+  <header>
+    <span>🏥 Cupos y Pacientes Citados</span>
+    <button onclick="cerrarSesion()" style="background:#dc3545; color:white; border:none; padding:5px 12px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;">🔒 Salir</button>
+  </header>
+
+  <div class="container" id="contenidoPrincipal" style="display:none;">
+
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-val" id="m-pro">0</div>
+        <div class="metric-lbl">📋 Oferta Cupos</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val" id="m-cit">0</div>
+        <div class="metric-lbl">👥 Citados</div>
+      </div>
+      <div class="metric-card faltan">
+        <div class="metric-val" id="m-faltan">0</div>
+        <div class="metric-lbl">🚨 Faltan Citar</div>
+      </div>
+      <div class="metric-card incompletos">
+        <div class="metric-val" id="m-pct">0%</div>
+        <div class="metric-lbl">📊 % Avance</div>
+      </div>
     </div>
 
-    <div id="status"></div>
+    <div class="filter-card">
+      <div class="filter-row">
+        <div class="filter-item">
+          <label>📅 Seleccionar Fecha:</label>
+          <select id="filterFecha" onchange="aplicarFiltros()"></select>
+        </div>
+        <div class="filter-item">
+          <label>📌 Estado de Cupos:</label>
+          <select id="filterEstado" onchange="aplicarFiltros()">
+            <option value="INCOMPLETO" selected>🟡 INCOMPLETOS (Faltan Citar)</option>
+            <option value="TODOS">Todos los Estados</option>
+            <option value="COMPLETO">🟢 COMPLETOS (100% Lleno)</option>
+          </select>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="filter-item">
+          <label>🔍 Buscar por Médico / Especialidad / Actividad:</label>
+          <input type="text" id="filterBuscar" onkeyup="aplicarFiltros()" placeholder="Escriba médico o especialidad...">
+        </div>
+      </div>
+    </div>
+
+    <div id="listaContenedor">Cargando cupos disponibles...</div>
+
   </div>
 
   <script>
-    document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
+    const DNI_PERMITIDOS = [
+      "06275632", "06288704", "15682236", "16785312", "16805097", "17800297", 
+      "17803645", "17803902", "17804999", "17805445", "17810413", "17817271", 
+      "17825420", "17827846", "17833723", "17839329", "17855832", "17875935", 
+      "17878703", "17884233", "17891704", "17905081", "17909333", "17914912", 
+      "17918211", "17922844", "18011780", "18026915", "18084966", "18087611", 
+      "18092107", "18095242", "18095569", "18097109", "18111502", "18126712", 
+      "18138019", "18160204", "18166847", "18213999", "18214386", "18826464", 
+      "18854203", "19081706", "19232498", "19332496", "26724124", "26729294", 
+      "32820645", "32933131", "32955888", "40104912", "40279246", "40419543", 
+      "40519576", "40568078", "40661036", "41399639", "41741857", "42160723", 
+      "42283343", "42807990", "42810426", "42829503", "43064415", "43331728", 
+      "43352956", "43613813", "43675796", "44035526", "44585811", "44613053", 
+      "44797390", "44941046", "45156523", "45208694", "45812958", "45897607", 
+      "46051306", "46574828", "46960941", "70015630", "70673055", "73270892"
+    ];
 
-    function procesarExcel(file) {
-      if(!file) return;
-      const reader = new FileReader();
-      
-      reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+    const GIST_JSON_URL = 'https://gist.githubusercontent.com/jc119580/714e9a742bcb89bd3bb2b7c7e9587564/raw/pacientes_citados.json?v=' + Date.now();
+    let rawDataCitados = [];
 
-        let resultado = [];
-        let currFecha = "24/08/2026";
-        let currMedico = "";
-        let currHorario = "";
-        let currEsp = "";
-        let esperandoEspecialidad = false;
-
-        for (let i = 0; i < rows.length; i++) {
-          let row = rows[i];
-          if (!row || row.length === 0) continue;
-
-          let col0 = row[0] ? String(row[0]).trim() : "";
-          let val1 = row[1] !== undefined ? row[1] : null;
-          let val2 = row[2] !== undefined ? row[2] : null;
-
-          if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila")) continue;
-
-          // 1. Detectar Fecha (ej. 24/08/2026)
-          let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
-          if (matchFecha) {
-            currFecha = matchFecha[0];
-            esperandoEspecialidad = false;
-            continue;
-          }
-
-          // 2. Detectar Horario (ej. 12:00 - 18:00)
-          if (col0.match(/\d{2}:\d{2}/)) {
-            currHorario = col0;
-            esperandoEspecialidad = true; // La siguiente fila DEBE ser Especialidad
-            continue;
-          }
-
-          // 3. Evaluar si la fila tiene datos numéricos (es la Actividad final)
-          let tieneNumeros = (val1 !== null && val2 !== null && (!isNaN(val1) || !isNaN(val2)));
-
-          if (tieneNumeros) {
-            let pro = parseInt(val1) || 0;
-            let cit = parseInt(val2) || 0;
-
-            if (pro > 0 || cit > 0) {
-              resultado.push({
-                fecha: currFecha,
-                medico: currMedico,
-                horario: currHorario,
-                especialidad: currEsp,
-                actividad: col0,
-                pro: pro,
-                cit: cit
-              });
-            }
-            esperandoEspecialidad = false;
-          } else {
-            // Si no tiene números:
-            if (esperandoEspecialidad) {
-              currEsp = col0; // Asignar a Especialidad porque viene justo después del horario
-              esperandoEspecialidad = false;
-            } else {
-              currMedico = col0; // Asignar a Médico porque no viene inmediatamente después de un horario
-            }
-          }
-        }
-
-        subirAGist(resultado);
-      };
-
-      reader.readAsArrayBuffer(file);
+    function limpiarTexto(txt) {
+      if(!txt) return "N/E";
+      return String(txt).replace(/QUIÑ´ONEZ/g, "QUIÑONEZ").replace(/QUIÑ'ONEZ/g, "QUIÑONEZ").trim();
     }
 
-    function subirAGist(jsonArray) {
-      const token = document.getElementById('ghToken').value.trim();
-      const gistId = document.getElementById('gistId').value.trim();
-      const status = document.getElementById('status');
+    function iniciarSesion() {
+      const u = document.getElementById("userInput").value.trim();
+      const p = document.getElementById("passInput").value.trim();
 
-      if(!token || !gistId) {
-        alert("Por favor ingrese su Token de GitHub.");
+      if (u === p && DNI_PERMITIDOS.includes(u)) {
+        document.getElementById("login-overlay").style.display = "none";
+        document.getElementById("login-error").style.display = "none";
+        document.getElementById("contenidoPrincipal").style.display = "block";
+        cargarDatosApp();
+      } else {
+        document.getElementById("login-error").style.display = "block";
+      }
+    }
+
+    function cerrarSesion() {
+      document.getElementById("contenidoPrincipal").style.display = "none";
+      document.getElementById("userInput").value = "";
+      document.getElementById("passInput").value = "";
+      document.getElementById("login-overlay").style.display = "flex";
+    }
+
+    function cargarDatosApp() {
+      fetch(GIST_JSON_URL)
+        .then(res => res.json())
+        .then(data => {
+          if(!Array.isArray(data) || data.length === 0) {
+            document.getElementById("listaContenedor").innerHTML = "⚠️ No hay datos registrados. Cargue la tabla con el convertidor.";
+            return;
+          }
+          rawDataCitados = data.map(item => ({
+            ...item,
+            fecha: item.fecha || "24/08/2026",
+            medico: limpiarTexto(item.medico),
+            especialidad: limpiarTexto(item.especialidad),
+            actividad: limpiarTexto(item.actividad),
+            pro: parseInt(item.pro) || 0,
+            cit: parseInt(item.cit) || 0
+          }));
+          poblarSelectorFechas();
+          aplicarFiltros();
+        })
+        .catch(err => {
+          console.error("Error:", err);
+          document.getElementById("listaContenedor").innerHTML = "⚠️ Error al conectar. Vuelva a subir el archivo Excel desde el convertidor.";
+        });
+    }
+
+    function poblarSelectorFechas() {
+      const setFechas = new Set();
+      rawDataCitados.forEach(item => { if(item.fecha) setFechas.add(item.fecha); });
+
+      const sel = document.getElementById("filterFecha");
+      sel.innerHTML = "";
+      let fechasArr = Array.from(setFechas);
+      if(fechasArr.length === 0) fechasArr = ["24/08/2026"];
+
+      fechasArr.forEach((f, idx) => {
+        sel.innerHTML += `<option value="${f}" ${idx === 0 ? 'selected' : ''}>📅 Fecha: ${f}</option>`;
+      });
+    }
+
+    function aplicarFiltros() {
+      const fechaSel = document.getElementById("filterFecha").value || "24/08/2026";
+      const estadoSel = document.getElementById("filterEstado").value;
+      const busqueda = document.getElementById("filterBuscar").value.toLowerCase().trim();
+
+      let filtrados = rawDataCitados.filter(item => {
+        let matchFecha = (item.fecha === fechaSel);
+        let estadoCalculado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
+        let matchEstado = (estadoSel === "TODOS" || estadoSel === estadoCalculado);
+
+        let matchTexto = (item.medico || "").toLowerCase().includes(busqueda) || 
+                         (item.especialidad || "").toLowerCase().includes(busqueda) || 
+                         (item.actividad || "").toLowerCase().includes(busqueda);
+
+        return matchFecha && matchEstado && matchTexto;
+      });
+
+      filtrados.sort((a, b) => {
+        let pctA = a.pro > 0 ? (a.cit / a.pro) * 100 : 0;
+        let pctB = b.pro > 0 ? (b.cit / b.pro) * 100 : 0;
+        return pctA - pctB;
+      });
+
+      renderizar(filtrados);
+    }
+
+    function renderizar(lista) {
+      let sumPro = 0, sumCit = 0, sumFaltan = 0;
+
+      const fechaSel = document.getElementById("filterFecha").value || "24/08/2026";
+      const listaFechaCompleta = rawDataCitados.filter(i => i.fecha === fechaSel);
+
+      listaFechaCompleta.forEach(item => {
+        sumPro += item.pro;
+        sumCit += item.cit;
+        let faltan = item.pro - item.cit;
+        if (faltan > 0) sumFaltan += faltan;
+      });
+
+      let pctGlobal = sumPro > 0 ? ((sumCit / sumPro) * 100).toFixed(1) : "0.0";
+
+      document.getElementById("m-pro").innerText = sumPro;
+      document.getElementById("m-cit").innerText = sumCit;
+      document.getElementById("m-faltan").innerText = sumFaltan;
+      document.getElementById("m-pct").innerText = pctGlobal + "%";
+
+      const cont = document.getElementById("listaContenedor");
+      cont.innerHTML = "";
+
+      if (lista.length === 0) {
+        cont.innerHTML = `<div style="text-align:center; padding:35px 15px; background:white; border-radius:10px; color:#555; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+            🎉 No hay cupos faltantes por citar con el filtro seleccionado.
+          </div>`;
         return;
       }
 
-      localStorage.setItem('gh_token', token);
-      status.style.color = "blue";
-      status.innerText = "⏳ Subiendo datos procesados...";
+      lista.forEach(item => {
+        let faltan = item.pro - item.cit;
+        let pct = item.pro > 0 ? Math.min(((item.cit / item.pro) * 100), 200).toFixed(1) : "0.0";
+        let estado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
 
-      fetch(`https://api.github.com/gists/${gistId}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `token ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          files: {
-            "pacientes_citados.json": {
-              content: JSON.stringify(jsonArray, null, 2)
-            }
-          }
-        })
-      })
-      .then(res => {
-        if(res.ok) {
-          status.style.color = "green";
-          status.innerText = "✅ ¡Estructura de datos corregida y actualizada!";
-        } else {
-          throw new Error("Error en el servidor de GitHub");
-        }
-      })
-      .catch(err => {
-        status.style.color = "red";
-        status.innerText = "❌ Error al actualizar: " + err.message;
+        let html = `
+          <div class="item-card ${estado}">
+            <div class="item-header">
+              <div>
+                <div class="item-title">🩺 ${item.especialidad}</div>
+                <div class="item-sub">👨‍⚕️ <b>${item.medico}</b></div>
+              </div>
+              <span class="badge-estado ${estado}">${estado === 'INCOMPLETO' ? '🟡 FALTAN CITAR' : '🟢 100% LLENO'}</span>
+            </div>
+
+            <div class="item-info">
+              <div>📌 <b>Actividad:</b> ${item.actividad}</div>
+              <div class="info-grid">
+                <div>⏰ <b>Horario:</b> ${item.horario}</div>
+                <div>🚨 <b>Cupos Faltantes:</b> <b style="color:${faltan > 0 ? '#d32f2f' : '#2e7d32'}; font-size:13px;">${faltan <= 0 ? 'COMPLETO' : faltan}</b></div>
+              </div>
+            </div>
+
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill ${estado === 'COMPLETO' ? 'completo' : ''}" style="width: ${Math.min(pct, 100)}%"></div>
+            </div>
+            <div class="progress-text">
+              <span>Citados: ${item.cit} de ${item.pro}</span>
+              <span>${pct}% Ocupado</span>
+            </div>
+          </div>
+        `;
+        cont.innerHTML += html;
       });
     }
   </script>
