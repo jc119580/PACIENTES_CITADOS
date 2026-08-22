@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel diario o haga clic
+      📁 Arrastre aquí su archivo Excel del día o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -63,6 +63,7 @@
           let resultado = [];
           let currFecha = "24/08/2026";
           let currMedico = "";
+          let currHorario = "";
           let currEsp = "";
           let currAct = "";
 
@@ -103,9 +104,22 @@
               continue;
             }
 
-            // 2. Detectar Hora/Horario -> Al encontrar Horario, guardamos la fila
+            // 2. Detectar Horario (Horario viene justo después del médico)
             let matchHorario = col0.match(/\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/);
             if (matchHorario) {
+              currHorario = matchHorario[0];
+              continue;
+            }
+
+            // 3. Clasificar Categorías
+            let isEsp = ESPS.some(esp => col0Upper.includes(esp));
+            let isAct = ACTIVIDADES.some(act => col0Upper.includes(act));
+
+            if (isEsp) {
+              currEsp = col0;
+            } else if (isAct) {
+              currAct = col0;
+              // Al llegar a la ACTIVIDAD (que es la última fila del bloque), guardamos los datos
               let pro = parseInt(val1) || 0;
               let cit = parseInt(val2) || 0;
 
@@ -114,30 +128,22 @@
                   fecha: currFecha,
                   medico: currMedico || "MÉDICO GENERAL",
                   especialidad: currEsp || "CONSULTA EXTERNA",
-                  actividad: currAct || "CONSULTA MEDICA",
-                  horario: matchHorario[0],
+                  actividad: currAct,
+                  horario: currHorario,
                   pro: pro,
                   cit: cit
                 });
               }
-              continue;
-            }
-
-            // 3. Evaluar Niveles Intermedios (Especialidad vs Sub Actividad vs Médico)
-            let isEsp = ESPS.some(esp => col0Upper.includes(esp));
-            let isAct = ACTIVIDADES.some(act => col0Upper.includes(act));
-
-            if (isEsp) {
-              currEsp = col0;
-            } else if (isAct) {
-              currAct = col0;
             } else {
+              // Si es un nuevo MÉDICO, limpiamos la especialidad y actividad previa
               currMedico = col0;
+              currEsp = "";
+              currAct = "";
             }
           }
 
           if (resultado.length === 0) {
-            alert("No se cargaron registros. Verifique el archivo Excel.");
+            alert("No se cargaron registros. Verifique el archivo.");
             return;
           }
 
@@ -162,7 +168,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Guardando datos procesados...";
+      status.innerText = "⏳ Actualizando archivo con especialidades corregidas...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -181,7 +187,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Jerarquía exacta procesada con éxito!";
+          status.innerText = "✅ ¡PEDIATRIA asignada correctamente a Ruiz Mendez Angel!";
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
