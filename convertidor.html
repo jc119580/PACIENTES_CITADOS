@@ -67,14 +67,17 @@
             let val1 = row[1];
             let val2 = row[2];
 
-            // OMITIR TEXTOS DE CABECERA, TITULOS Y SUMATORIAS
             let col0Upper = col0.toUpperCase();
+
+            // DESECHAMOS CUALQUIER TEXTO QUE SEA TÍTULO, MES, CABECERA O SUMATORIA
             if (
               !col0 || 
               col0Upper.includes("TOTAL GENERAL") || 
               col0Upper.includes("ETIQUETAS DE FILA") || 
               col0Upper.includes("CODACTI") ||
-              col0Upper.includes("PACIENTES CITADOS EN EL MES") ||
+              col0Upper.includes("PACIENTES") ||
+              col0Upper.includes("CITADOS EN EL MES") ||
+              col0Upper.includes("AGOSTO") ||
               col0Upper.includes("HOSPITAL")
             ) {
               continue;
@@ -93,7 +96,7 @@
               continue;
             }
 
-            // 3. Fila de Datos
+            // 3. Fila con Totales (Cupos PRO y CIT)
             let num1 = parseInt(val1);
             let num2 = parseInt(val2);
             let tieneDatos = (!isNaN(num1) && !isNaN(num2));
@@ -111,24 +114,24 @@
                 });
               }
             } else {
-              // 4. Determinar si es Especialidad o Nombre de Médico
+              // 4. Si es texto puro: Evaluamos si es Especialidad o Nombre del Médico
               let esEspecialidad = ESPS.some(esp => col0Upper.includes(esp));
               if (esEspecialidad) {
                 currEsp = col0;
               } else {
-                currMedico = col0;
+                currMedico = col0; // Asigna el verdadero nombre del médico (ej. BARRANTES MERCADO MARIA)
               }
             }
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron datos válidos de cupos en el Excel.");
+            alert("No se encontraron registros de cupos válidos. Verifique el archivo.");
             return;
           }
 
           subirAGist(resultado);
         } catch(err) {
-          alert("Error al leer el archivo Excel: " + err.message);
+          alert("Error al procesar el archivo: " + err.message);
         }
       };
 
@@ -147,7 +150,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Procesando datos limpios...";
+      status.innerText = "⏳ Filtrando títulos y procesando Médicos...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -166,7 +169,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos procesados correctamente! Abra el aplicativo web.";
+          status.innerText = "✅ ¡Datos limpios procesados con éxito! Abra la app.";
         } else {
           throw new Error("Error en la respuesta del servidor");
         }
