@@ -47,11 +47,22 @@
 
           let resultado = [];
           let currFecha = "24/08/2026";
-          
-          // Variables de pila jerárquica
           let currMedico = "";
           let currEsp = "";
           let currAct = "";
+
+          const ESPS = [
+            "MEDICINA", "CIRUGIA", "PEDIATRIA", "OFTALMOLOGIA", "GINECOLOGIA", 
+            "DERMATOLOGIA", "GERIATRIA", "OTORRINOLARINGOLOGIA", "UROLOGIA", 
+            "ANESTESIA", "NEUROLOGIA", "NEUMOLOGIA", "GASTROENTEROLOGIA", 
+            "ORTOPEDIA", "MEDICO DE CONTROL", "OBSTETRICIA", "REHABILITAC",
+            "TRAUMATOLOGIA"
+          ];
+
+          const ACTIVIDADES = [
+            "CONSULTA", "PRE-OPERATORIO", "TELECONSULTA", "CONTROL", 
+            "PROCEDIMIENTOS", "RIESGO", "EXAMEN"
+          ];
 
           for (let i = 0; i < rows.length; i++) {
             let row = rows[i];
@@ -62,7 +73,7 @@
             let val2 = row[2];
             let col0Upper = col0.toUpperCase();
 
-            // Desechar filas vacías, totales o cabeceras
+            // Desechar filas vacías o sumatorias generales
             if (
               !col0 || 
               col0Upper.includes("TOTAL GENERAL") || 
@@ -74,69 +85,57 @@
               continue;
             }
 
-            // 1. Detectar Fecha (ej. 24/08/2026)
+            // 1. Detectar Fecha
             let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
             if (matchFecha) {
               currFecha = matchFecha[0];
               continue;
             }
 
-            // Evaluar si la fila tiene números en columna B y C (PRO y CIT)
-            let num1 = parseInt(val1);
-            let num2 = parseInt(val2);
-            let tieneDatos = (!isNaN(num1) && !isNaN(num2));
+            // 2. Detectar si la celda es un HORARIO (contiene HH:MM)
+            let esHorario = col0.match(/\d{2}:\d{2}/);
 
-            if (tieneDatos) {
-              // Si TIENE números, col0 es el HORARIO (ej. 12:00 - 18:00)
+            if (esHorario) {
+              let num1 = parseInt(val1) || 0;
+              let num2 = parseInt(val2) || 0;
+
+              // Guardar únicamente al llegar a la celda del Horario
               if (num1 > 0 || num2 > 0) {
                 resultado.push({
                   fecha: currFecha,
-                  medico: currMedico,
-                  especialidad: currEsp,
-                  actividad: currAct,
+                  medico: currMedico || "MÉDICO GENERAL",
+                  especialidad: currEsp || "CONSULTA EXTERNA",
+                  actividad: currAct || "CONSULTA MEDICA",
                   horario: col0,
                   pro: num1,
                   cit: num2
                 });
               }
+              continue;
+            }
+
+            // 3. Clasificar los textos de la jerarquía
+            let esEspecialidad = ESPS.some(esp => col0Upper.includes(esp));
+            let esActividad = ACTIVIDADES.some(act => col0Upper.includes(act));
+
+            if (esEspecialidad) {
+              currEsp = col0;
+            } else if (esActividad) {
+              currAct = col0;
             } else {
-              // Si NO tiene números, es un nivel de texto.
-              // Miramos hacia adelante: ¿La fila siguiente tiene números?
-              let nextRow = rows[i + 1];
-              let nextVal1 = nextRow ? parseInt(nextRow[1]) : NaN;
-              let nextVal2 = nextRow ? parseInt(nextRow[2]) : NaN;
-              let nextTieneDatos = (!isNaN(nextVal1) && !isNaN(nextVal2));
-
-              if (nextTieneDatos) {
-                // Si la SIGUIENTE fila tiene números, esta fila de texto es la ACTIVIDAD (ej. PRE-OPERATORIO)
-                currAct = col0;
-              } else {
-                // Si la siguiente fila NO tiene números, evaluamos si esta fila es Especialidad o Médico.
-                // Miramos dos filas hacia adelante:
-                let nextNextRow = rows[i + 2];
-                let nnVal1 = nextNextRow ? parseInt(nextNextRow[1]) : NaN;
-                let nnVal2 = nextNextRow ? parseInt(nextNextRow[2]) : NaN;
-                let nnTieneDatos = (!isNaN(nnVal1) && !isNaN(nnVal2));
-
-                if (nnTieneDatos) {
-                  // Si dentro de 2 filas hay números, esta fila es la ESPECIALIDAD (ej. CIRUGIA GENERAL)
-                  currEsp = col0;
-                } else {
-                  // Si no, esta fila es el NOMBRE DEL MÉDICO (ej. BARRANTES MERCADO MARIA)
-                  currMedico = col0;
-                }
-              }
+              // Si no es fecha, ni horario, ni especialidad, ni actividad = ES EL NOMBRE DEL MÉDICO
+              currMedico = col0;
             }
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron registros de cupos válidos en el Excel.");
+            alert("No se encontraron registros válidos en el archivo.");
             return;
           }
 
           subirAGist(resultado);
         } catch(err) {
-          alert("Error al procesar el archivo: " + err.message);
+          alert("Error al procesar el archivo Excel: " + err.message);
         }
       };
 
@@ -155,7 +154,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Procesando jerarquía por niveles secuenciales...";
+      status.innerText = "⏳ Procesando jerarquía exacta...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -174,7 +173,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Jerarquía corregida exitosamente! Abra el aplicativo web.";
+          status.innerText = "✅ ¡Datos procesados correctamente!";
         } else {
           throw new Error("Error en la respuesta del servidor");
         }
