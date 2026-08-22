@@ -49,13 +49,13 @@
         let currMedico = "";
         let currHorario = "";
         let currEsp = "";
+        let esperandoEsp = false;
 
         for (let i = 0; i < rows.length; i++) {
           let row = rows[i];
           if (!row || row.length === 0) continue;
 
-          let rawCol0 = row[0] ? String(row[0]) : "";
-          let col0 = rawCol0.trim();
+          let col0 = row[0] ? String(row[0]).trim() : "";
           let val1 = row[1] !== undefined ? row[1] : null;
           let val2 = row[2] !== undefined ? row[2] : null;
 
@@ -65,19 +65,21 @@
           let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
           if (matchFecha) {
             currFecha = matchFecha[0];
+            esperandoEsp = false;
             continue;
           }
 
           // 2. Detectar Horario (ej. 12:00 - 18:00)
           if (col0.match(/\d{2}:\d{2}/)) {
             currHorario = col0;
+            esperandoEsp = true; // El siguiente texto sin números DEBE ser la Especialidad
             continue;
           }
 
-          // 3. Determinar si es Fila Hoja (Actividad con valores PRO/CIT)
-          let hasValues = (val1 !== null && val2 !== null && (!isNaN(val1) || !isNaN(val2)));
+          // 3. Fila de Datos (Tiene números en PRO y CIT)
+          let tieneNumeros = (val1 !== null && val2 !== null && !isNaN(val1) && !isNaN(val2));
 
-          if (hasValues && currEsp !== "") {
+          if (tieneNumeros) {
             let pro = parseInt(val1) || 0;
             let cit = parseInt(val2) || 0;
 
@@ -92,20 +94,14 @@
                 cit: cit
               });
             }
+            esperandoEsp = false;
           } else {
-            // Jerarquía sin valores de totales:
-            // Regla: Si ya tenemos Horario activo en la rama actual y la fila NO tiene números, es Especialidad.
-            // Si NO tenemos Horario aún (o venimos de cerrar una rama previa), es Nombre de Médico.
-            if (currHorario !== "" && !currEsp) {
-              currEsp = col0;
-            } else if (currHorario !== "" && currEsp !== "") {
-              // Si ya teníamos horario y especialidad guardados y volvemos a ver un texto sin números,
-              // es una nueva especialidad bajo el mismo médico u horario
-              currEsp = col0;
+            // 4. Si NO tiene números:
+            if (esperandoEsp) {
+              currEsp = col0; // Asignar a Especialidad por venir justo después de Horario
+              esperandoEsp = false;
             } else {
-              currMedico = col0;
-              currHorario = "";
-              currEsp = "";
+              currMedico = col0; // Asignar a Médico
             }
           }
         }
@@ -128,7 +124,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Procesando jerarquía exacta...";
+      status.innerText = "⏳ Procesando archivo de Excel...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -147,9 +143,9 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Jerarquía procesada y corregida con éxito!";
+          status.innerText = "✅ ¡Datos cargados con éxito!";
         } else {
-          throw new Error("Error en la respuesta del servidor");
+          throw new Error("Error en el servidor de GitHub");
         }
       })
       .catch(err => {
