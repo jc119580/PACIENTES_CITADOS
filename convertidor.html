@@ -6,9 +6,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
-    .card { background: white; max-width: 500px; margin: auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .drop-zone { border: 2px dashed #1a237e; border-radius: 8px; padding: 30px; cursor: pointer; background: #e8eaf6; color: #1a237e; font-weight: bold; margin: 15px 0; }
-    input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    .card { background: white; max-width: 500px; margin: auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .drop-zone { border: 2px dashed #1a237e; border-radius: 8px; padding: 25px; cursor: pointer; background: #e8eaf6; color: #1a237e; font-weight: bold; margin: 15px 0; }
+    input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 6px 0 12px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
     #status { margin-top: 15px; font-weight: bold; }
   </style>
 </head>
@@ -45,44 +45,11 @@
         const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
 
         let resultado = [];
-        let currFecha = "";
+        let currFecha = "24/08/2026";
         let currMedico = "";
         let currHorario = "";
         let currEsp = "";
 
-        // Detectar fecha dinámica en cualquier parte de las primeras 15 filas
-        for (let i = 0; i < Math.min(15, rows.length); i++) {
-          let r = rows[i];
-          if (r) {
-            for (let j = 0; j < r.length; j++) {
-              if (r[j]) {
-                let cellVal = String(r[j]).trim();
-                let match = cellVal.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
-                if (match) {
-                  currFecha = match[0];
-                  break;
-                }
-              }
-            }
-          }
-          if (currFecha) break;
-        }
-
-        // Si no encontró patrón con año completo, buscar dd/mm/yy
-        if (!currFecha) {
-          for (let i = 0; i < Math.min(15, rows.length); i++) {
-            let r = rows[i];
-            if (r && r[0]) {
-              let str = String(r[0]).trim();
-              if (str.includes("/") && str.length <= 12) {
-                currFecha = str.replace(/[^\d\/]/g, '');
-                break;
-              }
-            }
-          }
-        }
-
-        // Lectura de jerarquía
         for (let i = 0; i < rows.length; i++) {
           let row = rows[i];
           if (!row || row.length === 0) continue;
@@ -91,32 +58,47 @@
           let pro = parseInt(row[1]) || 0;
           let cit = parseInt(row[2]) || 0;
 
-          if (col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
-            currFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/)[0];
+          if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila")) continue;
+
+          // 1. Detectar Fecha (ej. 24/08/2026)
+          let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
+          if (matchFecha) {
+            currFecha = matchFecha[0];
             continue;
           }
 
-          if (col0.includes(" Total") || col0.includes("Total general")) continue;
-
-          if (col0.includes(" - ")) { 
-            currHorario = col0; 
-            continue; 
+          // 2. Detectar Horario (ej. 12:00 - 18:00)
+          if (col0.includes(" - ") || col0.includes(":")) {
+            currHorario = col0;
+            continue;
           }
 
-          if (pro > 0 || cit > 0) {
-            if (col0.includes("CONSULTA") || col0.includes("PRE-OPERATORIO") || col0.includes("VISITA") || col0.includes("PROCEDIMIENTOS") || col0.includes("TELECONSULTA")) {
-              resultado.push({
-                fecha: currFecha || "FECHA PENDIENTE",
-                medico: currMedico,
-                horario: currHorario,
-                especialidad: currEsp,
-                actividad: col0,
-                pro: pro,
-                cit: cit
-              });
-            } else if (col0.includes("MEDICINA") || col0.includes("CIRUGIA") || col0.includes("PEDIATRIA") || col0.includes("OFTALMOLOGIA") || col0.includes("GINECOLOGIA") || col0.includes("DERMATOLOGIA") || col0.includes("GERIATRIA")) {
+          // 3. Fila de Datos de Actividad (Tiene números en PRO y CIT)
+          if (row[1] !== undefined && row[2] !== undefined && (pro > 0 || cit > 0 || row[1] === 0)) {
+            resultado.push({
+              fecha: currFecha,
+              medico: currMedico,
+              horario: currHorario,
+              especialidad: currEsp,
+              actividad: col0,
+              pro: pro,
+              cit: cit
+            });
+            continue;
+          }
+
+          // 4. Jerarquía de Médico vs Especialidad
+          // Si son letras mayúsculas sin números, determinar si es Especialidad o Médico
+          if (col0 === col0.toUpperCase() && !col0.includes(" - ")) {
+            if (
+              col0.includes("MEDICINA") || col0.includes("CIRUGIA") || col0.includes("PEDIATRIA") || 
+              col0.includes("OFTALMOLOGIA") || col0.includes("GINECOLOGIA") || col0.includes("DERMATOLOGIA") || 
+              col0.includes("GERIATRIA") || col0.includes("OTORRINOLARINGOLOGIA") || col0.includes("UROLOGIA") ||
+              col0.includes("ANESTESIA") || col0.includes("NEUROLOGIA") || col0.includes("NEUMOLOGIA") ||
+              col0.includes("GASTROENTEROLOGIA") || col0.includes("ORTOPEDIA") || col0.includes("MEDICO")
+            ) {
               currEsp = col0;
-            } else if (!col0.includes(" - ") && !col0.includes("/")) {
+            } else {
               currMedico = col0;
             }
           }
@@ -160,7 +142,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos de la fecha cargada actualizados con éxito!";
+          status.innerText = "✅ ¡Datos actualizados exitosamente en el aplicativo!";
         } else {
           throw new Error("Error en la respuesta del servidor");
         }
