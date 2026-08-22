@@ -152,9 +152,13 @@
       "70015630", "70673055", "73270892"
     ]);
 
-    // ENLACE DIRECTO A TU NUEVO GIST DE PACIENTES CITADOS
     const GIST_JSON_URL = 'https://gist.githubusercontent.com/jc119580/714e9a742bcb89bd3bb2b7c7e9587564/raw/pacientes_citados.json?v=' + Math.random();
     let rawDataCitados = [];
+
+    function limpiarTexto(txt) {
+      if(!txt) return "";
+      return String(txt).replace(/QUIÑ´ONEZ/g, "QUIÑONEZ").replace(/QUIÑ'ONEZ/g, "QUIÑONEZ").trim();
+    }
 
     function iniciarSesion() {
       const u = document.getElementById("userInput").value.trim();
@@ -181,7 +185,12 @@
       fetch(GIST_JSON_URL)
         .then(res => res.json())
         .then(data => {
-          rawDataCitados = data;
+          rawDataCitados = data.map(item => ({
+            ...item,
+            medico: limpiarTexto(item.medico),
+            especialidad: limpiarTexto(item.especialidad),
+            actividad: limpiarTexto(item.actividad)
+          }));
           poblarSelectorFechas();
           aplicarFiltros();
         })
@@ -197,8 +206,10 @@
 
       const sel = document.getElementById("filterFecha");
       sel.innerHTML = "";
-      setFechas.forEach(f => {
-        sel.innerHTML += `<option value="${f}">📅 Fecha: ${f}</option>`;
+      let fechasArr = Array.from(setFechas);
+      
+      fechasArr.forEach((f, idx) => {
+        sel.innerHTML += `<option value="${f}" ${idx === 0 ? 'selected' : ''}>📅 Fecha: ${f}</option>`;
       });
     }
 
@@ -211,7 +222,7 @@
         let matchFecha = (item.fecha === fechaSel);
         
         let pct = item.pro > 0 ? (item.cit / item.pro) * 100 : 0;
-        let estadoCalculado = (pct >= 100) ? "COMPLETO" : "INCOMPLETO";
+        let estadoCalculado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
         let matchEstado = (estadoSel === "TODOS" || estadoSel === estadoCalculado);
 
         let matchTexto = (item.medico || "").toLowerCase().includes(busqueda) || 
@@ -221,7 +232,7 @@
         return matchFecha && matchEstado && matchTexto;
       });
 
-      // ORDENAR: Primero los INCOMPLETOS para que los terminalistas sepan qué citar urgente
+      // ORDENAR: Primero los INCOMPLETOS
       filtrados.sort((a, b) => {
         let pctA = a.pro > 0 ? (a.cit / a.pro) * 100 : 0;
         let pctB = b.pro > 0 ? (b.cit / b.pro) * 100 : 0;
@@ -234,7 +245,11 @@
     function renderizar(lista) {
       let sumPro = 0, sumCit = 0, sumFaltan = 0;
 
-      lista.forEach(item => {
+      // Calcular métricas generales para la fecha seleccionada
+      const fechaSel = document.getElementById("filterFecha").value;
+      const listaFechaCompleta = rawDataCitados.filter(i => i.fecha === fechaSel);
+
+      listaFechaCompleta.forEach(item => {
         sumPro += item.pro;
         sumCit += item.cit;
         let faltan = item.pro - item.cit;
@@ -252,7 +267,9 @@
       cont.innerHTML = "";
 
       if (lista.length === 0) {
-        cont.innerHTML = `<div style="text-align:center; padding:30px; color:#777; font-weight:bold;">No hay cupos coincidentes con los filtros seleccionados.</div>`;
+        cont.innerHTML = `<div style="text-align:center; padding:35px 15px; background:white; border-radius:10px; color:#555; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+            🎉 No hay cupos faltantes por citar con el filtro seleccionado.
+          </div>`;
         return;
       }
 
