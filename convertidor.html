@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel del día o haga clic
+      📁 Arrastre aquí su archivo Excel diario o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -34,6 +34,21 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
+    function formatearFecha(cadena) {
+      if (!cadena) return "S/F";
+      let matchIso = cadena.match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (matchIso) {
+        return `${matchIso[3]}/${matchIso[2]}/${matchIso[1]}`;
+      }
+      let matchNormal = cadena.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (matchNormal) {
+        let d = matchNormal[1].padStart(2, '0');
+        let m = matchNormal[2].padStart(2, '0');
+        return `${d}/${m}/${matchNormal[3]}`;
+      }
+      return cadena;
+    }
+
     function procesarExcel(file) {
       if(!file) return;
       const reader = new FileReader();
@@ -41,12 +56,12 @@
       reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {type: 'array'});
+          const workbook = XLSX.read(data, {type: 'array', cellDates: true});
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
 
           let resultado = [];
-          let currFecha = "24/08/2026";
+          let currFecha = "";
           let currMedico = "";
           let currEsp = "";
           let currAct = "";
@@ -73,69 +88,61 @@
             let val2 = row[2];
             let col0Upper = col0.toUpperCase();
 
-            // Desechar filas vacías o sumatorias generales
             if (
               !col0 || 
               col0Upper.includes("TOTAL GENERAL") || 
               col0Upper.includes("ETIQUETAS DE FILA") || 
-              col0Upper.includes("CODACTI") ||
-              col0Upper.includes("PACIENTES") ||
-              col0Upper.includes("AGOSTO")
+              col0Upper.includes("CODACTI")
             ) {
               continue;
             }
 
-            // 1. Detectar Fecha
-            let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
-            if (matchFecha) {
-              currFecha = matchFecha[0];
+            // 1. Lectura Dinámica de Fecha
+            if (col0.match(/\d{4}-\d{2}-\d{2}/) || col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
+              currFecha = formatearFecha(col0);
               continue;
             }
 
-            // 2. Detectar si la celda es un HORARIO (contiene HH:MM)
-            let esHorario = col0.match(/\d{2}:\d{2}/);
+            // 2. Lectura Dinámica de Horario y Registro
+            if (col0.match(/\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/)) {
+              let pro = parseInt(val1) || 0;
+              let cit = parseInt(val2) || 0;
 
-            if (esHorario) {
-              let num1 = parseInt(val1) || 0;
-              let num2 = parseInt(val2) || 0;
-
-              // Guardar únicamente al llegar a la celda del Horario
-              if (num1 > 0 || num2 > 0) {
+              if (pro > 0 || cit > 0) {
                 resultado.push({
-                  fecha: currFecha,
+                  fecha: currFecha || "FECHA ACTUAL",
                   medico: currMedico || "MÉDICO GENERAL",
                   especialidad: currEsp || "CONSULTA EXTERNA",
                   actividad: currAct || "CONSULTA MEDICA",
                   horario: col0,
-                  pro: num1,
-                  cit: num2
+                  pro: pro,
+                  cit: cit
                 });
               }
               continue;
             }
 
-            // 3. Clasificar los textos de la jerarquía
-            let esEspecialidad = ESPS.some(esp => col0Upper.includes(esp));
-            let esActividad = ACTIVIDADES.some(act => col0Upper.includes(act));
+            // 3. Clasificación Dinámica
+            let isEsp = ESPS.some(esp => col0Upper.includes(esp));
+            let isAct = ACTIVIDADES.some(act => col0Upper.includes(act));
 
-            if (esEspecialidad) {
+            if (isEsp) {
               currEsp = col0;
-            } else if (esActividad) {
+            } else if (isAct) {
               currAct = col0;
             } else {
-              // Si no es fecha, ni horario, ni especialidad, ni actividad = ES EL NOMBRE DEL MÉDICO
               currMedico = col0;
             }
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron registros válidos en el archivo.");
+            alert("No se encontraron registros de cupos válidos.");
             return;
           }
 
           subirAGist(resultado);
         } catch(err) {
-          alert("Error al procesar el archivo Excel: " + err.message);
+          alert("Error al procesar: " + err.message);
         }
       };
 
@@ -154,7 +161,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Procesando jerarquía exacta...";
+      status.innerText = "⏳ Procesando archivo diario...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -173,9 +180,9 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos procesados correctamente!";
+          status.innerText = "✅ ¡Datos cargados con éxito! Abra el aplicativo web.";
         } else {
-          throw new Error("Error en la respuesta del servidor");
+          throw new Error("Error en el servidor de GitHub");
         }
       })
       .catch(err => {
