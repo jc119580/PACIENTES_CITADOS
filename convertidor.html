@@ -46,10 +46,18 @@
 
         let resultado = [];
         let currFecha = "24/08/2026";
-        let currMedico = "";
-        let currHorario = "";
-        let currEsp = "";
-        let esperandoEsp = false;
+        let currMedico = "MEDICO GENERAL";
+        let currHorario = "08:00 - 12:00";
+        let currEsp = "CONSULTA EXTERNA";
+
+        // Lista de especialidades de Essalud
+        const ESPS = [
+          "MEDICINA", "CIRUGIA", "PEDIATRIA", "OFTALMOLOGIA", "GINECOLOGIA", 
+          "DERMATOLOGIA", "GERIATRIA", "OTORRINOLARINGOLOGIA", "UROLOGIA", 
+          "ANESTESIA", "NEUROLOGIA", "NEUMOLOGIA", "GASTROENTEROLOGIA", 
+          "ORTOPEDIA", "MEDICO DE CONTROL", "OBSTETRICIA", "REHABILITAC",
+          "TRAUMATOLOGIA"
+        ];
 
         for (let i = 0; i < rows.length; i++) {
           let row = rows[i];
@@ -59,27 +67,25 @@
           let val1 = row[1] !== undefined ? row[1] : null;
           let val2 = row[2] !== undefined ? row[2] : null;
 
-          if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila")) continue;
+          if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila") || col0.toUpperCase().includes("CODACTI")) continue;
 
           // 1. Detectar Fecha (ej. 24/08/2026)
           let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
           if (matchFecha) {
             currFecha = matchFecha[0];
-            esperandoEsp = false;
             continue;
           }
 
-          // 2. Detectar Horario (ej. 12:00 - 18:00)
+          // 2. Detectar Horario (contiene HH:MM)
           if (col0.match(/\d{2}:\d{2}/)) {
             currHorario = col0;
-            esperandoEsp = true; // El siguiente texto sin números DEBE ser la Especialidad
             continue;
           }
 
-          // 3. Fila de Datos (Tiene números en PRO y CIT)
-          let tieneNumeros = (val1 !== null && val2 !== null && !isNaN(val1) && !isNaN(val2));
+          // 3. Evaluar si es Fila de Datos (PRO / CIT en columna 1 y 2)
+          let tieneDatos = (val1 !== null && val2 !== null && !isNaN(val1) && !isNaN(val2));
 
-          if (tieneNumeros) {
+          if (tieneDatos) {
             let pro = parseInt(val1) || 0;
             let cit = parseInt(val2) || 0;
 
@@ -94,14 +100,15 @@
                 cit: cit
               });
             }
-            esperandoEsp = false;
           } else {
-            // 4. Si NO tiene números:
-            if (esperandoEsp) {
-              currEsp = col0; // Asignar a Especialidad por venir justo después de Horario
-              esperandoEsp = false;
+            // 4. Si NO tiene números, determinar si es Especialidad o Médico
+            let esEspecialidad = ESPS.some(esp => col0.toUpperCase().includes(esp));
+
+            if (esEspecialidad) {
+              currEsp = col0;
             } else {
-              currMedico = col0; // Asignar a Médico
+              // Si no coincide con palabras de Especialidad, ES EL NOMBRE DEL MÉDICO
+              currMedico = col0;
             }
           }
         }
@@ -124,7 +131,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Procesando archivo de Excel...";
+      status.innerText = "⏳ Separando Médicos y Especialidades...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -143,9 +150,9 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos cargados con éxito!";
+          status.innerText = "✅ ¡Datos procesados correctamente!";
         } else {
-          throw new Error("Error en el servidor de GitHub");
+          throw new Error("Error en la respuesta del servidor");
         }
       })
       .catch(err => {
