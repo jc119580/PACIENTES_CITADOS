@@ -47,9 +47,9 @@
 
           let resultado = [];
           let currFecha = "24/08/2026";
-          let currMedico = "MÉDICO REGISTRADO";
+          let currMedico = "";
           let currHorario = "S/H";
-          let currEsp = "CONSULTA EXTERNA";
+          let currEsp = "";
 
           const ESPS = [
             "MEDICINA", "CIRUGIA", "PEDIATRIA", "OFTALMOLOGIA", "GINECOLOGIA", 
@@ -67,19 +67,33 @@
             let val1 = row[1];
             let val2 = row[2];
 
-            if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila") || col0.toUpperCase().includes("CODACTI")) continue;
+            // OMITIR TEXTOS DE CABECERA, TITULOS Y SUMATORIAS
+            let col0Upper = col0.toUpperCase();
+            if (
+              !col0 || 
+              col0Upper.includes("TOTAL GENERAL") || 
+              col0Upper.includes("ETIQUETAS DE FILA") || 
+              col0Upper.includes("CODACTI") ||
+              col0Upper.includes("PACIENTES CITADOS EN EL MES") ||
+              col0Upper.includes("HOSPITAL")
+            ) {
+              continue;
+            }
 
+            // 1. Detectar Fecha
             let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
             if (matchFecha) {
               currFecha = matchFecha[0];
               continue;
             }
 
+            // 2. Detectar Horario
             if (col0.match(/\d{2}:\d{2}/)) {
               currHorario = col0;
               continue;
             }
 
+            // 3. Fila de Datos
             let num1 = parseInt(val1);
             let num2 = parseInt(val2);
             let tieneDatos = (!isNaN(num1) && !isNaN(num2));
@@ -88,16 +102,17 @@
               if (num1 > 0 || num2 > 0) {
                 resultado.push({
                   fecha: currFecha,
-                  medico: currMedico,
+                  medico: currMedico || "MÉDICO GENERAL",
                   horario: currHorario,
-                  especialidad: currEsp,
+                  especialidad: currEsp || "CONSULTA EXTERNA",
                   actividad: col0,
                   pro: num1,
                   cit: num2
                 });
               }
             } else {
-              let esEspecialidad = ESPS.some(esp => col0.toUpperCase().includes(esp));
+              // 4. Determinar si es Especialidad o Nombre de Médico
+              let esEspecialidad = ESPS.some(esp => col0Upper.includes(esp));
               if (esEspecialidad) {
                 currEsp = col0;
               } else {
@@ -107,7 +122,7 @@
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron registros de cupos en el Excel.");
+            alert("No se encontraron datos válidos de cupos en el Excel.");
             return;
           }
 
@@ -132,7 +147,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Guardando datos en la nube...";
+      status.innerText = "⏳ Procesando datos limpios...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -151,9 +166,9 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos cargados con éxito! Abra el aplicativo web.";
+          status.innerText = "✅ ¡Datos procesados correctamente! Abra el aplicativo web.";
         } else {
-          throw new Error("Error en el servidor de GitHub");
+          throw new Error("Error en la respuesta del servidor");
         }
       })
       .catch(err => {
