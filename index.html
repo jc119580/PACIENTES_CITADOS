@@ -9,7 +9,6 @@
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #f0f2f5; color: #333; }
     
-    /* MODAL DE LOGIN */
     #login-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(26, 35, 126, 0.95); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(5px); }
     .login-card { background: white; padding: 28px 20px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); text-align: center; }
     .login-card h3 { margin-top: 0; color: #1a237e; font-size: 18px; margin-bottom: 4px; }
@@ -20,7 +19,6 @@
     header { background: #1a237e; color: white; padding: 12px 16px; font-size: 16px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
     .container { padding: 12px; max-width: 1000px; margin: auto; }
     
-    /* RESUMEN DE MÉTRICAS */
     .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
     .metric-card { background: white; border-radius: 10px; padding: 10px 6px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-bottom: 4px solid #1a237e; }
     .metric-card.faltan { border-bottom-color: #d32f2f; background: #fff8f8; }
@@ -34,14 +32,12 @@
       .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
     }
 
-    /* FILTROS */
     .filter-card { background: white; border-radius: 10px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 8px; }
     .filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .filter-item { flex: 1; min-width: 140px; }
     .filter-item label { font-size: 11px; font-weight: bold; color: #1a237e; display: block; margin-bottom: 4px; }
     .filter-item select, .filter-item input { width: 100%; padding: 9px; border-radius: 6px; border: 1px solid #c5cae9; font-size: 13px; outline: none; background: white; }
 
-    /* TARJETAS */
     .item-card { background: white; border-radius: 10px; border: 1px solid #e0e0e0; border-left: 6px solid #f57f17; margin-bottom: 10px; padding: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.04); }
     .item-card.COMPLETO { border-left-color: #2e7d32; }
     
@@ -65,7 +61,6 @@
 </head>
 <body>
 
-  <!-- LOGIN -->
   <div id="login-overlay">
     <div class="login-card">
       <h3>🏥 PACIENTES CITADOS</h3>
@@ -84,7 +79,6 @@
 
   <div class="container" id="contenidoPrincipal" style="display:none;">
 
-    <!-- CUADRO DE MÉTRICAS -->
     <div class="metrics-grid">
       <div class="metric-card">
         <div class="metric-val" id="m-pro">0</div>
@@ -104,7 +98,6 @@
       </div>
     </div>
 
-    <!-- FILTROS -->
     <div class="filter-card">
       <div class="filter-row">
         <div class="filter-item">
@@ -184,7 +177,7 @@
         .then(res => res.json())
         .then(data => {
           if(!Array.isArray(data) || data.length === 0) {
-            document.getElementById("listaContenedor").innerHTML = "⚠️ No hay datos cargados. Por favor suba el Excel usando el convertidor.";
+            document.getElementById("listaContenedor").innerHTML = "⚠️ No hay datos registrados. Suba el Excel desde el convertidor.";
             return;
           }
           rawDataCitados = data.map(item => ({
