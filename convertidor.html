@@ -35,7 +35,7 @@
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
     function formatearFecha(cadena) {
-      if (!cadena) return "S/F";
+      if (!cadena) return "24/08/2026";
       let matchIso = cadena.match(/(\d{4})-(\d{2})-(\d{2})/);
       if (matchIso) {
         return `${matchIso[3]}/${matchIso[2]}/${matchIso[1]}`;
@@ -46,7 +46,7 @@
         let m = matchNormal[2].padStart(2, '0');
         return `${d}/${m}/${matchNormal[3]}`;
       }
-      return cadena;
+      return "24/08/2026";
     }
 
     function procesarExcel(file) {
@@ -61,7 +61,7 @@
           const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
 
           let resultado = [];
-          let currFecha = "";
+          let currFecha = "24/08/2026";
           let currMedico = "";
           let currEsp = "";
           let currAct = "";
@@ -97,24 +97,25 @@
               continue;
             }
 
-            // 1. Lectura Dinámica de Fecha
+            // 1. Detectar Fecha
             if (col0.match(/\d{4}-\d{2}-\d{2}/) || col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/)) {
               currFecha = formatearFecha(col0);
               continue;
             }
 
-            // 2. Lectura Dinámica de Horario y Registro
-            if (col0.match(/\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/)) {
+            // 2. Detectar Hora/Horario -> Al encontrar Horario, guardamos la fila
+            let matchHorario = col0.match(/\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/);
+            if (matchHorario) {
               let pro = parseInt(val1) || 0;
               let cit = parseInt(val2) || 0;
 
               if (pro > 0 || cit > 0) {
                 resultado.push({
-                  fecha: currFecha || "FECHA ACTUAL",
+                  fecha: currFecha,
                   medico: currMedico || "MÉDICO GENERAL",
                   especialidad: currEsp || "CONSULTA EXTERNA",
                   actividad: currAct || "CONSULTA MEDICA",
-                  horario: col0,
+                  horario: matchHorario[0],
                   pro: pro,
                   cit: cit
                 });
@@ -122,7 +123,7 @@
               continue;
             }
 
-            // 3. Clasificación Dinámica
+            // 3. Evaluar Niveles Intermedios (Especialidad vs Sub Actividad vs Médico)
             let isEsp = ESPS.some(esp => col0Upper.includes(esp));
             let isAct = ACTIVIDADES.some(act => col0Upper.includes(act));
 
@@ -136,7 +137,7 @@
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron registros de cupos válidos.");
+            alert("No se cargaron registros. Verifique el archivo Excel.");
             return;
           }
 
@@ -161,7 +162,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Procesando archivo diario...";
+      status.innerText = "⏳ Guardando datos procesados...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -180,7 +181,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos cargados con éxito! Abra el aplicativo web.";
+          status.innerText = "✅ ¡Jerarquía exacta procesada con éxito!";
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
