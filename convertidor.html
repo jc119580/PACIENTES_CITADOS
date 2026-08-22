@@ -39,81 +39,82 @@
       const reader = new FileReader();
       
       reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, {type: 'array'});
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, {type: 'array'});
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
 
-        let resultado = [];
-        let currFecha = "24/08/2026";
-        let currMedico = "MEDICO GENERAL";
-        let currHorario = "08:00 - 12:00";
-        let currEsp = "CONSULTA EXTERNA";
+          let resultado = [];
+          let currFecha = "24/08/2026";
+          let currMedico = "MÉDICO REGISTRADO";
+          let currHorario = "S/H";
+          let currEsp = "CONSULTA EXTERNA";
 
-        // Lista de especialidades de Essalud
-        const ESPS = [
-          "MEDICINA", "CIRUGIA", "PEDIATRIA", "OFTALMOLOGIA", "GINECOLOGIA", 
-          "DERMATOLOGIA", "GERIATRIA", "OTORRINOLARINGOLOGIA", "UROLOGIA", 
-          "ANESTESIA", "NEUROLOGIA", "NEUMOLOGIA", "GASTROENTEROLOGIA", 
-          "ORTOPEDIA", "MEDICO DE CONTROL", "OBSTETRICIA", "REHABILITAC",
-          "TRAUMATOLOGIA"
-        ];
+          const ESPS = [
+            "MEDICINA", "CIRUGIA", "PEDIATRIA", "OFTALMOLOGIA", "GINECOLOGIA", 
+            "DERMATOLOGIA", "GERIATRIA", "OTORRINOLARINGOLOGIA", "UROLOGIA", 
+            "ANESTESIA", "NEUROLOGIA", "NEUMOLOGIA", "GASTROENTEROLOGIA", 
+            "ORTOPEDIA", "MEDICO DE CONTROL", "OBSTETRICIA", "REHABILITAC",
+            "TRAUMATOLOGIA"
+          ];
 
-        for (let i = 0; i < rows.length; i++) {
-          let row = rows[i];
-          if (!row || row.length === 0) continue;
+          for (let i = 0; i < rows.length; i++) {
+            let row = rows[i];
+            if (!row || row.length === 0) continue;
 
-          let col0 = row[0] ? String(row[0]).trim() : "";
-          let val1 = row[1] !== undefined ? row[1] : null;
-          let val2 = row[2] !== undefined ? row[2] : null;
+            let col0 = row[0] ? String(row[0]).trim() : "";
+            let val1 = row[1];
+            let val2 = row[2];
 
-          if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila") || col0.toUpperCase().includes("CODACTI")) continue;
+            if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila") || col0.toUpperCase().includes("CODACTI")) continue;
 
-          // 1. Detectar Fecha (ej. 24/08/2026)
-          let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
-          if (matchFecha) {
-            currFecha = matchFecha[0];
-            continue;
-          }
-
-          // 2. Detectar Horario (contiene HH:MM)
-          if (col0.match(/\d{2}:\d{2}/)) {
-            currHorario = col0;
-            continue;
-          }
-
-          // 3. Evaluar si es Fila de Datos (PRO / CIT en columna 1 y 2)
-          let tieneDatos = (val1 !== null && val2 !== null && !isNaN(val1) && !isNaN(val2));
-
-          if (tieneDatos) {
-            let pro = parseInt(val1) || 0;
-            let cit = parseInt(val2) || 0;
-
-            if (pro > 0 || cit > 0) {
-              resultado.push({
-                fecha: currFecha,
-                medico: currMedico,
-                horario: currHorario,
-                especialidad: currEsp,
-                actividad: col0,
-                pro: pro,
-                cit: cit
-              });
+            let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
+            if (matchFecha) {
+              currFecha = matchFecha[0];
+              continue;
             }
-          } else {
-            // 4. Si NO tiene números, determinar si es Especialidad o Médico
-            let esEspecialidad = ESPS.some(esp => col0.toUpperCase().includes(esp));
 
-            if (esEspecialidad) {
-              currEsp = col0;
+            if (col0.match(/\d{2}:\d{2}/)) {
+              currHorario = col0;
+              continue;
+            }
+
+            let num1 = parseInt(val1);
+            let num2 = parseInt(val2);
+            let tieneDatos = (!isNaN(num1) && !isNaN(num2));
+
+            if (tieneDatos) {
+              if (num1 > 0 || num2 > 0) {
+                resultado.push({
+                  fecha: currFecha,
+                  medico: currMedico,
+                  horario: currHorario,
+                  especialidad: currEsp,
+                  actividad: col0,
+                  pro: num1,
+                  cit: num2
+                });
+              }
             } else {
-              // Si no coincide con palabras de Especialidad, ES EL NOMBRE DEL MÉDICO
-              currMedico = col0;
+              let esEspecialidad = ESPS.some(esp => col0.toUpperCase().includes(esp));
+              if (esEspecialidad) {
+                currEsp = col0;
+              } else {
+                currMedico = col0;
+              }
             }
           }
-        }
 
-        subirAGist(resultado);
+          if (resultado.length === 0) {
+            alert("No se encontraron registros de cupos en el Excel.");
+            return;
+          }
+
+          subirAGist(resultado);
+        } catch(err) {
+          alert("Error al leer el archivo Excel: " + err.message);
+        }
       };
 
       reader.readAsArrayBuffer(file);
@@ -131,7 +132,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Separando Médicos y Especialidades...";
+      status.innerText = "⏳ Guardando datos en la nube...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -150,9 +151,9 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos procesados correctamente!";
+          status.innerText = "✅ ¡Datos cargados con éxito! Abra el aplicativo web.";
         } else {
-          throw new Error("Error en la respuesta del servidor");
+          throw new Error("Error en el servidor de GitHub");
         }
       })
       .catch(err => {
