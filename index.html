@@ -235,14 +235,14 @@
         return;
       }
 
-      // Ordena las fechas de la más reciente a la más antigua
+      // Ordenar fechas de la más reciente a la más antigua
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
       fechasArr.forEach((f) => {
         sel.innerHTML += `<option value="${f}">📅 Fecha: ${f}</option>`;
       });
 
-      // Selecciona automáticamente la fecha más reciente (ej. 26/08/2026, 27/08/2026, etc.)
+      // Seleccionar por defecto la fecha más reciente
       sel.value = fechasArr[0];
     }
 
