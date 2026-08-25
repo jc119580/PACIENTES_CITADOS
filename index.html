@@ -150,6 +150,7 @@
       "46051306", "46574828", "46960941", "70015630", "70673055", "73270892"
     ];
 
+    // Forzar actualización sin caché del JSON
     const GIST_JSON_URL = 'https://gist.githubusercontent.com/jc119580/714e9a742bcb89bd3bb2b7c7e9587564/raw/pacientes_citados.json?v=' + Date.now();
     let rawDataCitados = [];
 
@@ -190,13 +191,14 @@
 
           rawDataCitados = data.map(item => ({
             ...item,
-            fecha: item.fecha || "S/F",
+            fecha: item.fecha || "25/08/2026",
             medico: limpiarTexto(item.medico),
             especialidad: limpiarTexto(item.especialidad),
             actividad: limpiarTexto(item.actividad),
             pro: parseInt(item.pro) || 0,
             cit: parseInt(item.cit) || 0
           }));
+
           poblarSelectorFechas();
           aplicarFiltros();
         })
@@ -227,16 +229,20 @@
       let fechasArr = Array.from(setFechas);
 
       if(fechasArr.length === 0) {
-        sel.innerHTML = `<option value="S/F">📅 Sin Fecha</option>`;
+        sel.innerHTML = `<option value="25/08/2026">📅 Fecha: 25/08/2026</option>`;
         return;
       }
 
-      // Ordenar fechas descendentemente (la fecha más reciente primero)
+      // Ordenar fechas descendentemente (la fecha más reciente arriba)
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
+      // Asignar el combo desplegable
       fechasArr.forEach((f, idx) => {
-        sel.innerHTML += `<option value="${f}" ${idx === 0 ? 'selected' : ''}>📅 Fecha: ${f}</option>`;
+        sel.innerHTML += `<option value="${f}" ${idx === 0 ? 'selected="selected"' : ''}>📅 Fecha: ${f}</option>`;
       });
+
+      // Seleccionar explícitamente el valor en el DOM
+      sel.value = fechasArr[0];
     }
 
     function aplicarFiltros() {
