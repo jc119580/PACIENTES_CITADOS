@@ -187,9 +187,14 @@
             document.getElementById("listaContenedor").innerHTML = "⚠️ No hay datos cargados. Por favor suba el Excel usando el convertidor.";
             return;
           }
+
+          // Obtener fecha actual de hoy en formato DD/MM/YYYY
+          let hoy = new Date();
+          let hoyStr = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+
           rawDataCitados = data.map(item => ({
             ...item,
-            fecha: item.fecha || "S/F",
+            fecha: (item.fecha && item.fecha !== "24/08/2026") ? item.fecha : hoyStr,
             medico: limpiarTexto(item.medico),
             especialidad: limpiarTexto(item.especialidad),
             actividad: limpiarTexto(item.actividad),
@@ -206,7 +211,7 @@
     }
 
     function convertirFechaAKey(strFecha) {
-      if(!strFecha || strFecha === "S/F") return 0;
+      if(!strFecha) return 0;
       let partes = strFecha.split("/");
       if(partes.length === 3) {
         let d = partes[0].padStart(2, '0');
@@ -219,22 +224,23 @@
 
     function poblarSelectorFechas() {
       const setFechas = new Set();
-      rawDataCitados.forEach(item => { if(item.fecha && item.fecha !== "S/F") setFechas.add(item.fecha); });
+      rawDataCitados.forEach(item => { if(item.fecha) setFechas.add(item.fecha); });
 
       const sel = document.getElementById("filterFecha");
       sel.innerHTML = "";
       let fechasArr = Array.from(setFechas);
 
       if(fechasArr.length === 0) {
-        sel.innerHTML = `<option value="S/F">📅 Sin Fecha</option>`;
+        let hoy = new Date();
+        let hoyStr = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+        sel.innerHTML = `<option value="${hoyStr}">📅 Fecha: ${hoyStr}</option>`;
         return;
       }
 
-      // ORDENAMOS LAS FECHAS DE MÁS RECIENTE A MÁS ANTIGUA
+      // Ordenar fechas descendentemente (la más reciente primero)
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
       fechasArr.forEach((f, idx) => {
-        // La primera opción (idx === 0) siempre será LA FECHA MÁS RECIENTE
         sel.innerHTML += `<option value="${f}" ${idx === 0 ? 'selected' : ''}>📅 Fecha: ${f}</option>`;
       });
     }
@@ -245,7 +251,7 @@
       const busqueda = document.getElementById("filterBuscar").value.toLowerCase().trim();
 
       let filtrados = rawDataCitados.filter(item => {
-        let matchFecha = (fechaSel === "S/F" || item.fecha === fechaSel);
+        let matchFecha = (item.fecha === fechaSel);
         let estadoCalculado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
         let matchEstado = (estadoSel === "TODOS" || estadoSel === estadoCalculado);
 
@@ -269,7 +275,7 @@
       let sumPro = 0, sumCit = 0, sumFaltan = 0;
 
       const fechaSel = document.getElementById("filterFecha").value;
-      const listaFechaCompleta = rawDataCitados.filter(i => (fechaSel === "S/F" || i.fecha === fechaSel));
+      const listaFechaCompleta = rawDataCitados.filter(i => (i.fecha === fechaSel));
 
       listaFechaCompleta.forEach(item => {
         sumPro += item.pro;
@@ -290,7 +296,7 @@
 
       if (lista.length === 0) {
         cont.innerHTML = `<div style="text-align:center; padding:35px 15px; background:white; border-radius:10px; color:#555; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-            🎉 No hay cupos con el filtro seleccionado para esta fecha.
+            🎉 No hay cupos con el filtro seleccionado para la fecha ${fechaSel}.
           </div>`;
         return;
       }
