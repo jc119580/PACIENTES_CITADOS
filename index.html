@@ -42,7 +42,7 @@
     .filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .filter-item { flex: 1; min-width: 140px; }
     .filter-item label { font-size: 11px; font-weight: bold; color: #1a237e; display: block; margin-bottom: 4px; }
-    .filter-item select, .filter-item input { width: 100%; padding: 9px; border-radius: 6px; border: 1px solid #c5cae9; font-size: 13px; outline: none; background: white; }
+    .filter-item select, .filter-item input { width: 100%; padding: 9px; border-radius: 6px; border: 1px solid #c5cae9; font-size: 13px; outline: none; background: white; cursor: pointer; }
 
     /* TARJETAS */
     .item-card { background: white; border-radius: 10px; border: 1px solid #e0e0e0; border-left: 6px solid #f57f17; margin-bottom: 10px; padding: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.04); }
@@ -191,7 +191,6 @@
             return;
           }
 
-          // LECTURA DIRECTA DE LA FECHA REAL DEL ARCHIVO
           rawDataCitados = data.map(item => ({
             ...item,
             fecha: item.fecha || "S/F",
@@ -236,14 +235,14 @@
         return;
       }
 
-      // Ordenar fechas: la más reciente siempre queda en el puesto #1
+      // Ordena las fechas de la más reciente a la más antigua
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
       fechasArr.forEach((f) => {
         sel.innerHTML += `<option value="${f}">📅 Fecha: ${f}</option>`;
       });
 
-      // Seleccionar por defecto siempre la fecha más reciente encontrada
+      // Selecciona automáticamente la fecha más reciente (ej. 26/08/2026, 27/08/2026, etc.)
       sel.value = fechasArr[0];
     }
 
