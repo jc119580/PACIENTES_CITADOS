@@ -188,13 +188,9 @@
             return;
           }
 
-          // Obtener fecha actual de hoy en formato DD/MM/YYYY
-          let hoy = new Date();
-          let hoyStr = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
-
           rawDataCitados = data.map(item => ({
             ...item,
-            fecha: (item.fecha && item.fecha !== "24/08/2026") ? item.fecha : hoyStr,
+            fecha: item.fecha || "S/F",
             medico: limpiarTexto(item.medico),
             especialidad: limpiarTexto(item.especialidad),
             actividad: limpiarTexto(item.actividad),
@@ -224,20 +220,18 @@
 
     function poblarSelectorFechas() {
       const setFechas = new Set();
-      rawDataCitados.forEach(item => { if(item.fecha) setFechas.add(item.fecha); });
+      rawDataCitados.forEach(item => { if(item.fecha && item.fecha !== "S/F") setFechas.add(item.fecha); });
 
       const sel = document.getElementById("filterFecha");
       sel.innerHTML = "";
       let fechasArr = Array.from(setFechas);
 
       if(fechasArr.length === 0) {
-        let hoy = new Date();
-        let hoyStr = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
-        sel.innerHTML = `<option value="${hoyStr}">📅 Fecha: ${hoyStr}</option>`;
+        sel.innerHTML = `<option value="S/F">📅 Sin Fecha</option>`;
         return;
       }
 
-      // Ordenar fechas descendentemente (la más reciente primero)
+      // Ordenar fechas descendentemente (la fecha más reciente primero)
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
       fechasArr.forEach((f, idx) => {
