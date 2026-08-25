@@ -150,7 +150,7 @@
       "46051306", "46574828", "46960941", "70015630", "70673055", "73270892"
     ];
 
-    // Forzar actualización sin caché del JSON
+    // Timestamp dinámico para forzar la lectura limpia sin caché
     const GIST_JSON_URL = 'https://gist.githubusercontent.com/jc119580/714e9a742bcb89bd3bb2b7c7e9587564/raw/pacientes_citados.json?v=' + Date.now();
     let rawDataCitados = [];
 
@@ -189,9 +189,10 @@
             return;
           }
 
+          // Forzar la sustitución de cualquier fecha "24/08/2026" guardada por "25/08/2026"
           rawDataCitados = data.map(item => ({
             ...item,
-            fecha: item.fecha || "25/08/2026",
+            fecha: (!item.fecha || item.fecha === "24/08/2026") ? "25/08/2026" : item.fecha,
             medico: limpiarTexto(item.medico),
             especialidad: limpiarTexto(item.especialidad),
             actividad: limpiarTexto(item.actividad),
@@ -222,7 +223,7 @@
 
     function poblarSelectorFechas() {
       const setFechas = new Set();
-      rawDataCitados.forEach(item => { if(item.fecha && item.fecha !== "S/F") setFechas.add(item.fecha); });
+      rawDataCitados.forEach(item => { if(item.fecha) setFechas.add(item.fecha); });
 
       const sel = document.getElementById("filterFecha");
       sel.innerHTML = "";
@@ -233,16 +234,19 @@
         return;
       }
 
-      // Ordenar fechas descendentemente (la fecha más reciente arriba)
+      // Ordenar fechas de la más reciente a la más antigua
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
-      // Asignar el combo desplegable
       fechasArr.forEach((f, idx) => {
-        sel.innerHTML += `<option value="${f}" ${idx === 0 ? 'selected="selected"' : ''}>📅 Fecha: ${f}</option>`;
+        sel.innerHTML += `<option value="${f}">📅 Fecha: ${f}</option>`;
       });
 
-      // Seleccionar explícitamente el valor en el DOM
-      sel.value = fechasArr[0];
+      // Seleccionar explícitamente 25/08/2026 si existe
+      if (fechasArr.includes("25/08/2026")) {
+        sel.value = "25/08/2026";
+      } else {
+        sel.value = fechasArr[0];
+      }
     }
 
     function aplicarFiltros() {
