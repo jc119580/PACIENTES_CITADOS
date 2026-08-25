@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel diario o haga clic
+      📁 Arrastre aquí su archivo Excel del día o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -34,27 +34,34 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
-    function formatearFecha(cadena) {
-      if (!cadena) return "24/08/2026";
-      let matchIso = cadena.match(/(\d{4})-(\d{2})-(\d{2})/);
+    // Convertidor universal de fechas
+    function parseFechaUniversal(val) {
+      if (!val) return null;
+      let str = String(val).trim();
+
+      // Formato YYYY-MM-DD (ej: 2026-08-25 00:00:00)
+      let matchIso = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (matchIso) {
-        return `${matchIso[3]}/${matchIso[2]}/${matchIso[1]}`;
+        let d = matchIso[3].padStart(2, '0');
+        let m = matchIso[2].padStart(2, '0');
+        let a = matchIso[1];
+        return `${d}/${m}/${a}`;
       }
-      let matchNormal = cadena.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-      if (matchNormal) {
-        let d = matchNormal[1].padStart(2, '0');
-        let m = matchNormal[2].padStart(2, '0');
-        return `${d}/${m}/${matchNormal[3]}`;
+
+      // Formato DD/MM/YYYY (ej: 25/08/2026)
+      let matchNorm = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (matchNorm) {
+        let d = matchNorm[1].padStart(2, '0');
+        let m = matchNorm[2].padStart(2, '0');
+        let a = matchNorm[3];
+        return `${d}/${m}/${a}`;
       }
-      return "24/08/2026";
+
+      return null;
     }
 
     function esHorario(cadena) {
       return /\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/.test(cadena);
-    }
-
-    function esFecha(cadena) {
-      return /\d{4}-\d{2}-\d{2}/.test(cadena) || /\d{1,2}\/\d{1,2}\/\d{4}/.test(cadena);
     }
 
     function procesarExcel(file) {
@@ -69,9 +76,13 @@
           const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
 
           let resultado = [];
-          let currFecha = "24/08/2026";
+          
+          // Fecha por defecto: la fecha actual del sistema si no se encuentra en el Excel
+          let hoy = new Date();
+          let defaultFecha = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+          let currFecha = defaultFecha;
+          
           let currMedico = "";
-
           let i = 0;
           const n = rows.length;
 
@@ -87,14 +98,15 @@
               continue;
             }
 
-            // 1. Detectar Fecha dinámica
-            if (esFecha(col0)) {
-              currFecha = formatearFecha(col0);
+            // 1. Detectar Fecha dinámica real del Excel
+            let fechaDetectada = parseFechaUniversal(col0);
+            if (fechaDetectada) {
+              currFecha = fechaDetectada;
               i++;
               continue;
             }
 
-            // 2. Detectar inicio del bloque de Horario
+            // 2. Detectar Horario y extraer sub-bloque
             if (esHorario(col0)) {
               let hor = col0;
               let esp = (i + 1 < n && rows[i + 1] && rows[i + 1][0]) ? String(rows[i + 1][0]).trim() : "CONSULTA EXTERNA";
@@ -116,24 +128,23 @@
                 });
               }
 
-              // Avanzar saltando la fila de especialidad y sub-actividad procesadas
               i += 3;
               continue;
             } else {
-              // Si no es fecha ni horario, es el NOMBRE DEL MÉDICO
+              // Nombre del Médico
               currMedico = col0;
               i++;
             }
           }
 
           if (resultado.length === 0) {
-            alert("No se cargaron registros. Verifique el archivo Excel.");
+            alert("No se encontraron registros válidos en el archivo.");
             return;
           }
 
           subirAGist(resultado);
         } catch(err) {
-          alert("Error al procesar: " + err.message);
+          alert("Error al procesar el archivo: " + err.message);
         }
       };
 
@@ -152,7 +163,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Guardando datos procesados dinámicamente...";
+      status.innerText = "⏳ Subiendo datos con fecha dinámica corregida...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -171,7 +182,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Procesado dinámicamente 100% perfecto sin listas fijas!";
+          status.innerText = "✅ ¡Fecha y datos cargados dinámicamente con éxito!";
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
