@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel del día o haga clic
+      📁 Arrastre aquí su archivo Excel diario o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -34,12 +34,10 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
-    // Convertidor universal de fechas
     function parseFechaUniversal(val) {
       if (!val) return null;
       let str = String(val).trim();
 
-      // Formato YYYY-MM-DD (ej: 2026-08-25 00:00:00)
       let matchIso = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (matchIso) {
         let d = matchIso[3].padStart(2, '0');
@@ -48,7 +46,6 @@
         return `${d}/${m}/${a}`;
       }
 
-      // Formato DD/MM/YYYY (ej: 25/08/2026)
       let matchNorm = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
       if (matchNorm) {
         let d = matchNorm[1].padStart(2, '0');
@@ -76,12 +73,7 @@
           const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
 
           let resultado = [];
-          
-          // Fecha por defecto: la fecha actual del sistema si no se encuentra en el Excel
-          let hoy = new Date();
-          let defaultFecha = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
-          let currFecha = defaultFecha;
-          
+          let currFecha = "";
           let currMedico = "";
           let i = 0;
           const n = rows.length;
@@ -98,15 +90,14 @@
               continue;
             }
 
-            // 1. Detectar Fecha dinámica real del Excel
             let fechaDetectada = parseFechaUniversal(col0);
             if (fechaDetectada) {
               currFecha = fechaDetectada;
+              currMedico = "";
               i++;
               continue;
             }
 
-            // 2. Detectar Horario y extraer sub-bloque
             if (esHorario(col0)) {
               let hor = col0;
               let esp = (i + 1 < n && rows[i + 1] && rows[i + 1][0]) ? String(rows[i + 1][0]).trim() : "CONSULTA EXTERNA";
@@ -116,7 +107,7 @@
               let pro = parseInt(rowAct[1]) || 0;
               let cit = parseInt(rowAct[2]) || 0;
 
-              if (pro > 0 || cit > 0) {
+              if ((pro > 0 || cit > 0) && currFecha) {
                 resultado.push({
                   fecha: currFecha,
                   medico: currMedico || "MÉDICO GENERAL",
@@ -131,7 +122,6 @@
               i += 3;
               continue;
             } else {
-              // Nombre del Médico
               currMedico = col0;
               i++;
             }
@@ -163,7 +153,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Subiendo datos con fecha dinámica corregida...";
+      status.innerText = "⏳ Procesando y subiendo todas las fechas del mes a GitHub...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -182,7 +172,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Fecha y datos cargados dinámicamente con éxito!";
+          status.innerText = "✅ ¡Todas las fechas del mes cargadas con éxito!";
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
