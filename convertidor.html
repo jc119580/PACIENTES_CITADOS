@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel diario o haga clic
+      📁 Arrastre aquí su archivo Excel mensual o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -34,10 +34,21 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
+    // Convertidor universal que soporta objetos Date, cadenas ISO y textos de Excel
     function parseFechaUniversal(val) {
       if (!val) return null;
+
+      // Si es un objeto Date de JavaScript
+      if (val instanceof Date && !isNaN(val)) {
+        let d = String(val.getDate()).padStart(2, '0');
+        let m = String(val.getMonth() + 1).padStart(2, '0');
+        let a = val.getFullYear();
+        return `${d}/${m}/${a}`;
+      }
+
       let str = String(val).trim();
 
+      // Formato YYYY-MM-DD
       let matchIso = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (matchIso) {
         let d = matchIso[3].padStart(2, '0');
@@ -46,19 +57,21 @@
         return `${d}/${m}/${a}`;
       }
 
-      let matchNorm = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      // Formato DD/MM/YYYY o MM/DD/YYYY
+      let matchNorm = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
       if (matchNorm) {
-        let d = matchNorm[1].padStart(2, '0');
-        let m = matchNorm[2].padStart(2, '0');
+        let p1 = matchNorm[1].padStart(2, '0');
+        let p2 = matchNorm[2].padStart(2, '0');
         let a = matchNorm[3];
-        return `${d}/${m}/${a}`;
+        if (a.length === 2) a = "20" + a;
+        return `${p1}/${p2}/${a}`;
       }
 
       return null;
     }
 
     function esHorario(cadena) {
-      return /\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/.test(cadena);
+      return /\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/.test(String(cadena));
     }
 
     function procesarExcel(file) {
@@ -68,7 +81,7 @@
       reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+          const workbook = XLSX.read(data, {type: 'array', cellDates: true, dateNF: 'yyyy-mm-dd'});
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
 
@@ -82,7 +95,8 @@
             let row = rows[i];
             if (!row || row.length === 0) { i++; continue; }
 
-            let col0 = row[0] ? String(row[0]).trim() : "";
+            let cellRaw = row[0];
+            let col0 = cellRaw ? String(cellRaw).trim() : "";
             let col0Upper = col0.toUpperCase();
 
             if (!col0 || col0Upper.includes("TOTAL GENERAL") || col0Upper.includes("ETIQUETAS DE FILA") || col0Upper.includes("CODACTI")) {
@@ -90,7 +104,7 @@
               continue;
             }
 
-            let fechaDetectada = parseFechaUniversal(col0);
+            let fechaDetectada = parseFechaUniversal(cellRaw);
             if (fechaDetectada) {
               currFecha = fechaDetectada;
               currMedico = "";
@@ -153,7 +167,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = "⏳ Procesando y subiendo todas las fechas del mes a GitHub...";
+      status.innerText = "⏳ Subiendo todas las fechas del mes a GitHub...";
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -172,7 +186,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Todas las fechas del mes cargadas con éxito!";
+          status.innerText = "✅ ¡Todas las fechas de agosto subidas correctamente!";
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
