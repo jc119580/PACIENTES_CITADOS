@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel diario/mensual o haga clic
+      📁 Arrastre aquí su archivo Excel o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -34,11 +34,11 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
-    // Convertidor universal que soporta seriales de Excel, Objetos Date y cadenas ISO/texto
+    // Convertidor universal para números de serie de Excel, objetos Date y texto ISO
     function parseFechaUniversal(val) {
       if (val === null || val === undefined) return null;
 
-      // 1. Si es objeto Date nativo
+      // 1. Objeto Date nativo
       if (val instanceof Date && !isNaN(val)) {
         let d = String(val.getDate()).padStart(2, '0');
         let m = String(val.getMonth() + 1).padStart(2, '0');
@@ -46,7 +46,7 @@
         return `${d}/${m}/${a}`;
       }
 
-      // 2. Si es número de serie de fecha de Excel (ej: 46260)
+      // 2. Número de serie de fecha de Excel (ej: 46235 -> 01/08/2026)
       if (typeof val === 'number' && val > 40000 && val < 60000) {
         let dateObj = XLSX.SSF.parse_date_code(val);
         if (dateObj) {
@@ -59,7 +59,7 @@
 
       let str = String(val).trim();
 
-      // 3. Formato YYYY-MM-DD
+      // 3. Cadena YYYY-MM-DD
       let m1 = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (m1) {
         let d = m1[3].padStart(2, '0');
@@ -68,7 +68,7 @@
         return `${d}/${m}/${a}`;
       }
 
-      // 4. Formato DD/MM/YYYY
+      // 4. Cadena DD/MM/YYYY
       let m2 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
       if (m2) {
         let d = m2[1].padStart(2, '0');
@@ -77,7 +77,7 @@
         return `${d}/${m}/${a}`;
       }
 
-      // 5. Formato M/D/YY
+      // 5. Cadena M/D/YY
       let m3 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2})/);
       if (m3) {
         let p1 = m3[1].padStart(2, '0');
@@ -207,7 +207,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = `✅ ¡Éxito! Se procesaron ${jsonArray.length} cupos y ${fechasUnicas.length} fechas distintas del mes.`;
+          status.innerText = `✅ ¡Éxito! Se procesaron ${jsonArray.length} cupos y ${fechasUnicas.length} fechas distintas (${fechasUnicas[fechasUnicas.length-1]} incluida).`;
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
