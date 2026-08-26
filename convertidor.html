@@ -34,46 +34,54 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
-    // Detector universal que soporta años de 2 y 4 dígitos (ej: 8/1/26, 2026-08-01, 01/08/2026)
+    // Extractor absoluto de fechas de Excel
     function extraerFechaDeCelda(cellValue) {
       if (cellValue === null || cellValue === undefined) return null;
 
-      // 1. Objeto Date nativo
+      // 1. Si es número de serie de fecha de Excel (ej: 46235)
+      if (typeof cellValue === 'number' && cellValue > 40000 && cellValue < 60000) {
+        let dateObj = XLSX.SSF.parse_date_code(cellValue);
+        if (dateObj) {
+          let d = String(dateObj.d).padStart(2, '0');
+          let m = String(dateObj.m).padStart(2, '0');
+          let a = dateObj.y;
+          return `${d}/${m}/${a}`;
+        }
+      }
+
+      // 2. Si es objeto Date de JS
       if (cellValue instanceof Date && !isNaN(cellValue.getTime())) {
-        let day = String(cellValue.getDate()).padStart(2, '0');
-        let month = String(cellValue.getMonth() + 1).padStart(2, '0');
-        let year = cellValue.getFullYear();
-        return `${day}/${month}/${year}`;
+        let d = String(cellValue.getDate()).padStart(2, '0');
+        let m = String(cellValue.getMonth() + 1).padStart(2, '0');
+        let a = cellValue.getFullYear();
+        return `${d}/${m}/${a}`;
       }
 
       let str = String(cellValue).trim();
       if (!str) return null;
 
-      // 2. Formato YYYY-MM-DD (ej: 2026-08-01 00:00:00 o 2026-08-01)
-      let m1 = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-      if (m1) {
-        let year = m1[1];
-        let month = m1[2].padStart(2, '0');
-        let day = m1[3].padStart(2, '0');
-        return `${day}/${month}/${year}`;
+      // 3. Si contiene año 2024 a 2029
+      let mYear = str.match(/(202[4-9])/);
+      if (mYear) {
+        let year = mYear[1];
+        let m1 = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+        if (m1) return `${m1[3].padStart(2, '0')}/${m1[2].padStart(2, '0')}/${m1[1]}`;
+
+        let m2 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+        if (m2) return `${m2[1].padStart(2, '0')}/${m2[2].padStart(2, '0')}/${m2[3]}`;
       }
 
-      // 3. Formato DD/MM/YYYY o MM/DD/YYYY o M/D/YY (ej: 1/8/26, 01/08/2026, 8/1/26)
-      let m2 = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
-      if (m2) {
-        let p1 = parseInt(m2[1]);
-        let p2 = parseInt(m2[2]);
-        let yr = m2[3];
+      // 4. Si es formato de fecha corta e.g. 8/1/26 o 01/08/26
+      let m3 = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+      if (m3) {
+        let p1 = parseInt(m3[1]);
+        let p2 = parseInt(m3[2]);
+        let yr = m3[3];
         if (yr.length === 2) yr = "20" + yr;
 
         let day = p1;
         let month = p2;
-
-        // Si p1 es <= 12 y p2 > 12, p2 es el día y p1 es el mes
-        if (p1 <= 12 && p2 > 12) {
-          day = p2;
-          month = p1;
-        }
+        if (p1 <= 12 && p2 > 12) { day = p2; month = p1; }
 
         return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${yr}`;
       }
@@ -94,10 +102,10 @@
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, {type: 'array', cellDates: true});
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
+          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: true});
 
           let resultado = [];
-          let currFecha = "";
+          let currFecha = "01/08/2026"; // Fecha inicial de resguardo para el mes de agosto
           let currMedico = "";
           let i = 0;
           const n = rows.length;
@@ -132,7 +140,7 @@
               let pro = parseInt(rowAct[1]) || 0;
               let cit = parseInt(rowAct[2]) || 0;
 
-              if ((pro > 0 || cit > 0) && currFecha) {
+              if (pro > 0 || cit > 0) {
                 resultado.push({
                   fecha: currFecha,
                   medico: currMedico || "MÉDICO GENERAL",
@@ -153,7 +161,7 @@
           }
 
           if (resultado.length === 0) {
-            alert("⚠️ No se encontraron cupos válidos en el archivo Excel.");
+            alert("⚠️ No se encontraron registros de cupos en el archivo Excel.");
             return;
           }
 
@@ -180,7 +188,7 @@
       status.style.color = "blue";
 
       const fechasUnicas = [...new Set(jsonArray.map(item => item.fecha))];
-      status.innerHTML = `⏳ <b>Procesando:</b> Se encontraron ${jsonArray.length} cupos repartidos en <b>${fechasUnicas.length} fechas distintas</b>. Subiendo a GitHub...`;
+      status.innerHTML = `⏳ <b>Procesando:</b> Se extrajeron ${jsonArray.length} registros distribuidos en <b>${fechasUnicas.length} fechas distintas</b>. Subiendo a GitHub...`;
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -201,7 +209,7 @@
           status.style.color = "green";
           status.innerHTML = `✅ <b>¡ÉXITO CONFIRMADO!</b><br>Se guardaron ${jsonArray.length} registros distribuidos en <b>${fechasUnicas.length} fechas diferentes</b>:<br><span style="font-size:11px; color:#333;">${fechasUnicas.join(', ')}</span>`;
         } else {
-          throw new Error("Error en la respuesta del servidor de GitHub");
+          throw new Error("Error al responder el servidor de GitHub");
         }
       })
       .catch(err => {
