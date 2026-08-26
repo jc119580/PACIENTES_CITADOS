@@ -6,10 +6,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
-    .card { background: white; max-width: 550px; margin: auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .card { background: white; max-width: 500px; margin: auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .drop-zone { border: 2px dashed #1a237e; border-radius: 8px; padding: 25px; cursor: pointer; background: #e8eaf6; color: #1a237e; font-weight: bold; margin: 15px 0; }
     input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 6px 0 12px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-    #status { margin-top: 15px; font-weight: bold; line-height: 1.5; text-align: left; background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #ddd; }
+    #status { margin-top: 15px; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -28,62 +28,38 @@
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
-    <div id="status">Esperando archivo...</div>
+    <div id="status"></div>
   </div>
 
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
-    // Extractor absoluto de fechas de Excel
-    function extraerFechaDeCelda(cellValue) {
-      if (cellValue === null || cellValue === undefined) return null;
+    function parseFechaUniversal(val) {
+      if (!val) return null;
+      let str = String(val).trim();
 
-      // 1. Si es número de serie de fecha de Excel (ej: 46235)
-      if (typeof cellValue === 'number' && cellValue > 40000 && cellValue < 60000) {
-        let dateObj = XLSX.SSF.parse_date_code(cellValue);
-        if (dateObj) {
-          let d = String(dateObj.d).padStart(2, '0');
-          let m = String(dateObj.m).padStart(2, '0');
-          let a = dateObj.y;
-          return `${d}/${m}/${a}`;
-        }
-      }
-
-      // 2. Si es objeto Date de JS
-      if (cellValue instanceof Date && !isNaN(cellValue.getTime())) {
-        let d = String(cellValue.getDate()).padStart(2, '0');
-        let m = String(cellValue.getMonth() + 1).padStart(2, '0');
-        let a = cellValue.getFullYear();
+      // Formato YYYY-MM-DD
+      let mIso = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (mIso) {
+        let d = mIso[3].padStart(2, '0');
+        let m = mIso[2].padStart(2, '0');
+        let a = mIso[1];
         return `${d}/${m}/${a}`;
       }
 
-      let str = String(cellValue).trim();
-      if (!str) return null;
+      // Formato DD/MM/YYYY o M/D/Y
+      let mNorm = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+      if (mNorm) {
+        let p1 = mNorm[1].padStart(2, '0');
+        let p2 = mNorm[2].padStart(2, '0');
+        let a = mNorm[3];
+        if (a.length === 2) a = "20" + a;
 
-      // 3. Si contiene año 2024 a 2029
-      let mYear = str.match(/(202[4-9])/);
-      if (mYear) {
-        let year = mYear[1];
-        let m1 = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-        if (m1) return `${m1[3].padStart(2, '0')}/${m1[2].padStart(2, '0')}/${m1[1]}`;
-
-        let m2 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-        if (m2) return `${m2[1].padStart(2, '0')}/${m2[2].padStart(2, '0')}/${m2[3]}`;
-      }
-
-      // 4. Si es formato de fecha corta e.g. 8/1/26 o 01/08/26
-      let m3 = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
-      if (m3) {
-        let p1 = parseInt(m3[1]);
-        let p2 = parseInt(m3[2]);
-        let yr = m3[3];
-        if (yr.length === 2) yr = "20" + yr;
-
-        let day = p1;
-        let month = p2;
-        if (p1 <= 12 && p2 > 12) { day = p2; month = p1; }
-
-        return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${yr}`;
+        // Corregir si día y mes vienen invertidos
+        if (parseInt(p1) <= 12 && parseInt(p2) > 12) {
+          return `${p2}/${p1}/${a}`;
+        }
+        return `${p1}/${p2}/${a}`;
       }
 
       return null;
@@ -100,12 +76,12 @@
       reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+          const workbook = XLSX.read(data, {type: 'array', cellDates: false});
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: true});
+          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
 
           let resultado = [];
-          let currFecha = "01/08/2026"; // Fecha inicial de resguardo para el mes de agosto
+          let currFecha = "";
           let currMedico = "";
           let i = 0;
           const n = rows.length;
@@ -114,8 +90,7 @@
             let row = rows[i];
             if (!row || row.length === 0) { i++; continue; }
 
-            let cellRaw = row[0];
-            let col0 = cellRaw ? String(cellRaw).trim() : "";
+            let col0 = row[0] ? String(row[0]).trim() : "";
             let col0Upper = col0.toUpperCase();
 
             if (!col0 || col0Upper.includes("TOTAL GENERAL") || col0Upper.includes("ETIQUETAS DE FILA") || col0Upper.includes("CODACTI")) {
@@ -123,7 +98,7 @@
               continue;
             }
 
-            let fechaDetectada = extraerFechaDeCelda(cellRaw);
+            let fechaDetectada = parseFechaUniversal(col0);
             if (fechaDetectada) {
               currFecha = fechaDetectada;
               currMedico = "";
@@ -140,7 +115,7 @@
               let pro = parseInt(rowAct[1]) || 0;
               let cit = parseInt(rowAct[2]) || 0;
 
-              if (pro > 0 || cit > 0) {
+              if ((pro > 0 || cit > 0) && currFecha) {
                 resultado.push({
                   fecha: currFecha,
                   medico: currMedico || "MÉDICO GENERAL",
@@ -161,7 +136,7 @@
           }
 
           if (resultado.length === 0) {
-            alert("⚠️ No se encontraron registros de cupos en el archivo Excel.");
+            alert("No se encontraron registros en el archivo Excel.");
             return;
           }
 
@@ -186,9 +161,7 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-
-      const fechasUnicas = [...new Set(jsonArray.map(item => item.fecha))];
-      status.innerHTML = `⏳ <b>Procesando:</b> Se extrajeron ${jsonArray.length} registros distribuidos en <b>${fechasUnicas.length} fechas distintas</b>. Subiendo a GitHub...`;
+      status.innerText = `⏳ Subiendo ${jsonArray.length} registros a GitHub...`;
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -207,14 +180,14 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerHTML = `✅ <b>¡ÉXITO CONFIRMADO!</b><br>Se guardaron ${jsonArray.length} registros distribuidos en <b>${fechasUnicas.length} fechas diferentes</b>:<br><span style="font-size:11px; color:#333;">${fechasUnicas.join(', ')}</span>`;
+          status.innerText = `✅ ¡Éxito! Se subieron ${jsonArray.length} registros de cupos correctamente.`;
         } else {
-          throw new Error("Error al responder el servidor de GitHub");
+          throw new Error("Error en el servidor de GitHub");
         }
       })
       .catch(err => {
         status.style.color = "red";
-        status.innerText = "❌ Error al actualizar GitHub: " + err.message;
+        status.innerText = "❌ Error al actualizar: " + err.message;
       });
     }
   </script>
