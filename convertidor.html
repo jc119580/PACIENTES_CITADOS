@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel o haga clic
+      📁 Arrastre aquí su archivo Excel diario/mensual o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -34,10 +34,11 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
-    // Detector universal e infalible de fechas
+    // Convertidor universal que soporta seriales de Excel, Objetos Date y cadenas ISO/texto
     function parseFechaUniversal(val) {
-      if (!val) return null;
+      if (val === null || val === undefined) return null;
 
+      // 1. Si es objeto Date nativo
       if (val instanceof Date && !isNaN(val)) {
         let d = String(val.getDate()).padStart(2, '0');
         let m = String(val.getMonth() + 1).padStart(2, '0');
@@ -45,9 +46,20 @@
         return `${d}/${m}/${a}`;
       }
 
+      // 2. Si es número de serie de fecha de Excel (ej: 46260)
+      if (typeof val === 'number' && val > 40000 && val < 60000) {
+        let dateObj = XLSX.SSF.parse_date_code(val);
+        if (dateObj) {
+          let d = String(dateObj.d).padStart(2, '0');
+          let m = String(dateObj.m).padStart(2, '0');
+          let a = dateObj.y;
+          return `${d}/${m}/${a}`;
+        }
+      }
+
       let str = String(val).trim();
 
-      // Formato YYYY-MM-DD
+      // 3. Formato YYYY-MM-DD
       let m1 = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (m1) {
         let d = m1[3].padStart(2, '0');
@@ -56,7 +68,7 @@
         return `${d}/${m}/${a}`;
       }
 
-      // Formato DD/MM/YYYY
+      // 4. Formato DD/MM/YYYY
       let m2 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
       if (m2) {
         let d = m2[1].padStart(2, '0');
@@ -65,7 +77,7 @@
         return `${d}/${m}/${a}`;
       }
 
-      // Formato M/D/YY o D/M/YY
+      // 5. Formato M/D/YY
       let m3 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2})/);
       if (m3) {
         let p1 = m3[1].padStart(2, '0');
@@ -88,12 +100,12 @@
       reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {type: 'array', raw: true});
+          const workbook = XLSX.read(data, {type: 'array', cellDates: true});
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: true});
 
           let resultado = [];
-          let currFecha = "25/08/2026"; // Fecha por defecto
+          let currFecha = "";
           let currMedico = "";
           let i = 0;
           const n = rows.length;
@@ -128,7 +140,7 @@
               let pro = parseInt(rowAct[1]) || 0;
               let cit = parseInt(rowAct[2]) || 0;
 
-              if (pro > 0 || cit > 0) {
+              if ((pro > 0 || cit > 0) && currFecha) {
                 resultado.push({
                   fecha: currFecha,
                   medico: currMedico || "MÉDICO GENERAL",
@@ -174,7 +186,9 @@
 
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
-      status.innerText = `⏳ Subiendo ${jsonArray.length} registros a GitHub...`;
+
+      const fechasUnicas = [...new Set(jsonArray.map(item => item.fecha))];
+      status.innerText = `⏳ Subiendo ${jsonArray.length} registros distribuidos en ${fechasUnicas.length} fechas...`;
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -193,7 +207,7 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = `✅ ¡Éxito! Se subieron ${jsonArray.length} registros de cupos correctamente.`;
+          status.innerText = `✅ ¡Éxito! Se procesaron ${jsonArray.length} cupos y ${fechasUnicas.length} fechas distintas del mes.`;
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
