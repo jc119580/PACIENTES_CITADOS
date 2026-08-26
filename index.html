@@ -160,7 +160,7 @@
       return String(txt).replace(/QUIÑ´ONEZ/g, "QUIÑONEZ").replace(/QUIÑ'ONEZ/g, "QUIÑONEZ").trim();
     }
 
-    // Normalizador de formato DD/MM/YYYY
+    // Normalizador que corrige cualquier formato de fecha de Agosto a DD/08/YYYY
     function normalizarFecha(strFecha) {
       if(!strFecha) return "S/F";
       let partes = String(strFecha).split("/");
@@ -169,7 +169,7 @@
         let p1 = parseInt(partes[1]);
         let a = partes[2];
 
-        // Si viene en formato MM/DD/YYYY (ej: 08/12/2026), se invierte a DD/MM/YYYY (12/08/2026)
+        // Si viene en formato MM/DD/YYYY (ej: 08/12/2026), corrige a DD/MM/YYYY (12/08/2026)
         if(p0 === 8 && p1 > 8) {
           let d = String(p1).padStart(2, '0');
           let m = "08";
@@ -266,7 +266,7 @@
         sel.innerHTML += `<option value="${f}">📅 Fecha: ${f}</option>`;
       });
 
-      // Selecciona automáticamente la fecha más reciente (ej: 31/08, 29/08, 28/08, 27/08, 26/08...)
+      // Selecciona de forma predeterminada la fecha actual (26/08/2026) o la más reciente
       sel.value = fechasArr.includes("26/08/2026") ? "26/08/2026" : fechasArr[0];
     }
 
