@@ -6,10 +6,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
-    .card { background: white; max-width: 500px; margin: auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .card { background: white; max-width: 520px; margin: auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
     .drop-zone { border: 2px dashed #1a237e; border-radius: 8px; padding: 25px; cursor: pointer; background: #e8eaf6; color: #1a237e; font-weight: bold; margin: 15px 0; }
     input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 6px 0 12px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-    #status { margin-top: 15px; font-weight: bold; }
+    #status { margin-top: 15px; font-weight: bold; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel mensual o haga clic
+      📁 Arrastre aquí su archivo Excel diario/mensual o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -34,38 +34,42 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
-    // Extractor universal de fechas para celdas de Excel
-    function parseFechaUniversal(val) {
-      if (val === null || val === undefined) return null;
+    // Extractor infalible que analiza cualquier fecha nativa, ISO o texto de Excel
+    function parseFechaUniversal(cellValue) {
+      if (cellValue === null || cellValue === undefined) return null;
 
-      let str = String(val).trim();
+      // 1. Si es un objeto Date nativo
+      if (cellValue instanceof Date && !isNaN(cellValue.getTime())) {
+        let day = String(cellValue.getDate()).padStart(2, '0');
+        let month = String(cellValue.getMonth() + 1).padStart(2, '0');
+        let year = cellValue.getFullYear();
+        return `${day}/${month}/${year}`;
+      }
+
+      let str = String(cellValue).trim();
       if (!str) return null;
 
-      // 1. Formato YYYY-MM-DD (ej: 2026-08-26 o 2026-08-01 00:00:00)
+      // 2. Intento de conversión mediante constructor nativo de Date
+      let dObj = new Date(str);
+      if (!isNaN(dObj.getTime()) && str.length > 5) {
+        let yr = dObj.getFullYear();
+        if (yr >= 2024 && yr <= 2030) {
+          let day = String(dObj.getDate()).padStart(2, '0');
+          let month = String(dObj.getMonth() + 1).padStart(2, '0');
+          return `${day}/${month}/${yr}`;
+        }
+      }
+
+      // 3. Patrón YYYY-MM-DD
       let m1 = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (m1) {
-        let d = m1[3].padStart(2, '0');
-        let m = m1[2].padStart(2, '0');
-        let a = m1[1];
-        return `${d}/${m}/${a}`;
+        return `${m1[3].padStart(2, '0')}/${m1[2].padStart(2, '0')}/${m1[1]}`;
       }
 
-      // 2. Formato DD/MM/YYYY (ej: 26/08/2026)
+      // 4. Patrón DD/MM/YYYY
       let m2 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
       if (m2) {
-        let d = m2[1].padStart(2, '0');
-        let m = m2[2].padStart(2, '0');
-        let a = m2[3];
-        return `${d}/${m}/${a}`;
-      }
-
-      // 3. Formato M/D/YY o D/M/YY
-      let m3 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2})/);
-      if (m3) {
-        let p1 = m3[1].padStart(2, '0');
-        let p2 = m3[2].padStart(2, '0');
-        let a = "20" + m3[3];
-        return `${p1}/${p2}/${a}`;
+        return `${m2[1].padStart(2, '0')}/${m2[2].padStart(2, '0')}/${m2[3]}`;
       }
 
       return null;
@@ -82,10 +86,10 @@
       reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          // cellDates: false y raw: false formatean las celdas como cadenas de texto visibles
-          const workbook = XLSX.read(data, {type: 'array', cellDates: false});
+          // cellDates en true para obtener objetos Date limpios
+          const workbook = XLSX.read(data, {type: 'array', cellDates: true});
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
+          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: true});
 
           let resultado = [];
           let currFecha = "";
@@ -106,6 +110,7 @@
               continue;
             }
 
+            // Detección de cambio de fecha
             let fechaDetectada = parseFechaUniversal(cellRaw);
             if (fechaDetectada) {
               currFecha = fechaDetectada;
@@ -144,13 +149,13 @@
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron registros válidos en el archivo.");
+            alert("⚠️ No se pudieron leer registros en el Excel. Verifique el archivo.");
             return;
           }
 
           subirAGist(resultado);
         } catch(err) {
-          alert("Error al procesar el archivo: " + err.message);
+          alert("Error al procesar el archivo Excel: " + err.message);
         }
       };
 
@@ -170,8 +175,9 @@
       localStorage.setItem('gh_token', token);
       status.style.color = "blue";
 
+      // Obtener arreglo de fechas únicas encontradas
       const fechasUnicas = [...new Set(jsonArray.map(item => item.fecha))];
-      status.innerText = `⏳ Subiendo ${jsonArray.length} registros distribuidos en ${fechasUnicas.length} fechas...`;
+      status.innerText = `⏳ Subiendo ${jsonArray.length} registros distribuidos en ${fechasUnicas.length} fechas distintas...`;
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -190,14 +196,14 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = `✅ ¡Éxito! Se procesaron ${jsonArray.length} cupos y ${fechasUnicas.length} fechas distintas (${fechasUnicas.join(', ')}).`;
+          status.innerText = `✅ ¡ÉXITO! Se procesaron ${jsonArray.length} cupos en ${fechasUnicas.length} fechas diferentes:\n${fechasUnicas.join(', ')}`;
         } else {
           throw new Error("Error en el servidor de GitHub");
         }
       })
       .catch(err => {
         status.style.color = "red";
-        status.innerText = "❌ Error al actualizar: " + err.message;
+        status.innerText = "❌ Error al actualizar GitHub: " + err.message;
       });
     }
   </script>
