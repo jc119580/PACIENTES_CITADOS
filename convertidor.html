@@ -34,56 +34,28 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
-    // Detector multicapa e infalible de fechas de Excel
+    // Lector directo de cadenas de texto sin inversión de mes/día
     function extraerFechaDeCelda(cellValue) {
       if (cellValue === null || cellValue === undefined) return null;
-
-      // 1. Objeto Date de JavaScript
-      if (cellValue instanceof Date && !isNaN(cellValue.getTime())) {
-        let day = String(cellValue.getDate()).padStart(2, '0');
-        let month = String(cellValue.getMonth() + 1).padStart(2, '0');
-        let year = cellValue.getFullYear();
-        return `${day}/${month}/${year}`;
-      }
-
       let str = String(cellValue).trim();
       if (!str) return null;
 
-      // 2. Formato YYYY-MM-DD
+      // 1. Formato YYYY-MM-DD (ej: 2026-08-12 00:00:00 -> 12/08/2026)
       let m1 = str.match(/(202[4-9])[-/](\d{1,2})[-/](\d{1,2})/);
       if (m1) {
-        return `${m1[3].padStart(2, '0')}/${m1[2].padStart(2, '0')}/${m1[1]}`;
+        let year = m1[1];
+        let month = m1[2].padStart(2, '0');
+        let day = m1[3].padStart(2, '0');
+        return `${day}/${month}/${year}`;
       }
 
-      // 3. Formato DD/MM/YYYY
+      // 2. Formato DD/MM/YYYY (ej: 12/08/2026 -> 12/08/2026)
       let m2 = str.match(/(\d{1,2})[-/](\d{1,2})[-/](202[4-9])/);
       if (m2) {
-        return `${m2[1].padStart(2, '0')}/${m2[2].padStart(2, '0')}/${m2[3]}`;
-      }
-
-      // 4. Formato corto M/D/YY o D/M/YY (ej: 8/1/26 o 26/8/26)
-      let m3 = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2})$/);
-      if (m3) {
-        let p1 = parseInt(m3[1]);
-        let p2 = parseInt(m3[2]);
-        let yr = "20" + m3[3];
-
-        let day = p1;
-        let month = p2;
-        if (p1 <= 12 && p2 > 12) { day = p2; month = p1; }
-
-        return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${yr}`;
-      }
-
-      // 5. Intento mediante parser nativo de JavaScript si incluye un año válido
-      if (str.includes('2024') || str.includes('2025') || str.includes('2026') || str.includes('2027')) {
-        let dObj = new Date(str);
-        if (!isNaN(dObj.getTime())) {
-          let day = String(dObj.getDate()).padStart(2, '0');
-          let month = String(dObj.getMonth() + 1).padStart(2, '0');
-          let year = dObj.getFullYear();
-          return `${day}/${month}/${year}`;
-        }
+        let day = m2[1].padStart(2, '0');
+        let month = m2[2].padStart(2, '0');
+        let year = m2[3];
+        return `${day}/${month}/${year}`;
       }
 
       return null;
@@ -100,7 +72,8 @@
       reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+          // cellDates en false para mantener el texto original de Excel
+          const workbook = XLSX.read(data, {type: 'array', cellDates: false});
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
 
@@ -123,7 +96,6 @@
               continue;
             }
 
-            // Detectar cambio de fecha en la columna A
             let fechaDetectada = extraerFechaDeCelda(cellRaw);
             if (fechaDetectada) {
               currFecha = fechaDetectada;
