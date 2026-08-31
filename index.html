@@ -259,22 +259,22 @@
         return;
       }
 
-      // Ordena las fechas descendentemente (las fechas más recientes arriba)
+      // Ordena las fechas descendentemente (las fechas más recientes de Agosto arriba)
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
       fechasArr.forEach((f) => {
         sel.innerHTML += `<option value="${f}">📅 Fecha: ${f}</option>`;
       });
 
-      // Obtener la fecha actual dinámica del sistema (formato DD/MM/YYYY)
+      // Se genera dinámicamente la fecha de hoy en formato DD/MM/YYYY
       const hoy = new Date();
-      const diaHoy = String(hoy.getDate()).padStart(2, '0');
-      const mesHoy = String(hoy.getMonth() + 1).padStart(2, '0');
-      const anioHoy = hoy.getFullYear();
-      const fechaHoyFormateada = `${diaHoy}/${mesHoy}/${anioHoy}`;
+      const d = String(hoy.getDate()).padStart(2, '0');
+      const m = String(hoy.getMonth() + 1).padStart(2, '0');
+      const a = hoy.getFullYear();
+      const fechaHoy = `${d}/${m}/${a}`;
 
-      // Selecciona de forma predeterminada la fecha actual o la más reciente disponible
-      sel.value = fechasArr.includes(fechaHoyFormateada) ? fechaHoyFormateada : fechasArr[0];
+      // Selecciona de forma predeterminada la fecha actual si está en la lista; si no, toma la más reciente
+      sel.value = fechasArr.includes(fechaHoy) ? fechaHoy : fechasArr[0];
     }
 
     function aplicarFiltros() {
