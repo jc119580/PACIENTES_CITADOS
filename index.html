@@ -259,15 +259,22 @@
         return;
       }
 
-      // Ordena las fechas descendentemente (las fechas más recientes de Agosto arriba)
+      // Ordena las fechas descendentemente (las fechas más recientes arriba)
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
       fechasArr.forEach((f) => {
         sel.innerHTML += `<option value="${f}">📅 Fecha: ${f}</option>`;
       });
 
-      // Selecciona de forma predeterminada la fecha actual (26/08/2026) o la más reciente
-      sel.value = fechasArr.includes("26/08/2026") ? "26/08/2026" : fechasArr[0];
+      // Obtener la fecha actual dinámica del sistema (formato DD/MM/YYYY)
+      const hoy = new Date();
+      const diaHoy = String(hoy.getDate()).padStart(2, '0');
+      const mesHoy = String(hoy.getMonth() + 1).padStart(2, '0');
+      const anioHoy = hoy.getFullYear();
+      const fechaHoyFormateada = `${diaHoy}/${mesHoy}/${anioHoy}`;
+
+      // Selecciona de forma predeterminada la fecha actual o la más reciente disponible
+      sel.value = fechasArr.includes(fechaHoyFormateada) ? fechaHoyFormateada : fechasArr[0];
     }
 
     function aplicarFiltros() {
