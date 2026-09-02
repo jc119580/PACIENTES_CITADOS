@@ -155,24 +155,32 @@
 
     let rawDataCitados = [];
 
-    function limpiarTexto(txt) {
-      if(!txt) return "N/E";
-      return String(txt).replace(/QUIÑ´ONEZ/g, "QUIÑONEZ").replace(/QUIÑ'ONEZ/g, "QUIÑONEZ").trim();
+    function escapeHTML(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
 
-    // Normalizador que corrige cualquier formato de fecha de Agosto a DD/08/YYYY
+    function limpiarTexto(txt) {
+      if (!txt) return "N/E";
+      return String(txt).replace(/QUIÑ['´]ONEZ/gi, "QUIÑONEZ").trim();
+    }
+
     function normalizarFecha(strFecha) {
-      if(!strFecha) return "S/F";
-      let partes = String(strFecha).split("/");
-      if(partes.length === 3) {
-        let p0 = parseInt(partes[0]);
-        let p1 = parseInt(partes[1]);
+      if (!strFecha) return "S/F";
+      const partes = String(strFecha).trim().split("/");
+      if (partes.length === 3) {
+        let p0 = parseInt(partes[0], 10);
+        let p1 = parseInt(partes[1], 10);
         let a = partes[2];
 
-        // Si viene en formato MM/DD/YYYY (ej: 08/12/2026), corrige a DD/MM/YYYY (12/08/2026)
-        if(p0 === 8 && p1 > 8) {
-          let d = String(p1).padStart(2, '0');
-          let m = "08";
+        if (p0 > 12 && p1 <= 12) {
+          let d = String(p0).padStart(2, '0');
+          let m = String(p1).padStart(2, '0');
           return `${d}/${m}/${a}`;
         }
 
@@ -208,9 +216,12 @@
       const jsonUrl = 'https://gist.githubusercontent.com/jc119580/714e9a742bcb89bd3bb2b7c7e9587564/raw/pacientes_citados.json?v=' + Date.now();
 
       fetch(jsonUrl, { cache: "no-store" })
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          return res.json();
+        })
         .then(data => {
-          if(!Array.isArray(data) || data.length === 0) {
+          if (!Array.isArray(data) || data.length === 0) {
             document.getElementById("listaContenedor").innerHTML = "⚠️ No hay datos cargados. Por favor suba el Excel usando el convertidor.";
             return;
           }
@@ -221,8 +232,9 @@
             medico: limpiarTexto(item.medico),
             especialidad: limpiarTexto(item.especialidad),
             actividad: limpiarTexto(item.actividad),
-            pro: parseInt(item.pro) || 0,
-            cit: parseInt(item.cit) || 0
+            horario: limpiarTexto(item.horario),
+            pro: parseInt(item.pro, 10) || 0,
+            cit: parseInt(item.cit, 10) || 0
           }));
 
           poblarSelectorFechas();
@@ -235,46 +247,53 @@
     }
 
     function convertirFechaAKey(strFecha) {
-      if(!strFecha) return 0;
+      if (!strFecha) return 0;
       let partes = strFecha.split("/");
-      if(partes.length === 3) {
+      if (partes.length === 3) {
         let d = partes[0].padStart(2, '0');
         let m = partes[1].padStart(2, '0');
         let a = partes[2];
-        return parseInt(`${a}${m}${d}`);
+        return parseInt(`${a}${m}${d}`, 10);
       }
       return 0;
     }
 
     function poblarSelectorFechas() {
       const setFechas = new Set();
-      rawDataCitados.forEach(item => { if(item.fecha && item.fecha !== "S/F") setFechas.add(item.fecha); });
+      rawDataCitados.forEach(item => { if (item.fecha && item.fecha !== "S/F") setFechas.add(item.fecha); });
 
       const sel = document.getElementById("filterFecha");
       sel.innerHTML = "";
       let fechasArr = Array.from(setFechas);
 
-      if(fechasArr.length === 0) {
+      if (fechasArr.length === 0) {
         sel.innerHTML = `<option value="S/F">📅 Sin Fecha</option>`;
         return;
       }
 
-      // Ordena las fechas descendentemente (las fechas más recientes de Agosto arriba)
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
+      let optionsBuffer = "";
       fechasArr.forEach((f) => {
-        sel.innerHTML += `<option value="${f}">📅 Fecha: ${f}</option>`;
+        optionsBuffer += `<option value="${escapeHTML(f)}">📅 Fecha: ${escapeHTML(f)}</option>`;
       });
+      sel.innerHTML = optionsBuffer;
 
-      // Se genera dinámicamente la fecha de hoy en formato DD/MM/YYYY
+      // OBTIENE LA FECHA ACTUAL DEL DISPOSITIVO
       const hoy = new Date();
       const d = String(hoy.getDate()).padStart(2, '0');
       const m = String(hoy.getMonth() + 1).padStart(2, '0');
       const a = hoy.getFullYear();
       const fechaHoy = `${d}/${m}/${a}`;
 
-      // Selecciona de forma predeterminada la fecha actual si está en la lista; si no, toma la más reciente
-      sel.value = fechasArr.includes(fechaHoy) ? fechaHoy : fechasArr[0];
+      // SI LA FECHA DE HOY ESTÁ EN EL JSON, LA SELECCIONA AUTOMÁTICAMENTE AL INICIAR
+      if (fechasArr.includes(fechaHoy)) {
+        sel.value = fechaHoy;
+      } else {
+        const keyHoy = convertirFechaAKey(fechaHoy);
+        const fechaProxima = fechasArr.find(f => convertirFechaAKey(f) >= keyHoy);
+        sel.value = fechaProxima || fechasArr[0];
+      }
     }
 
     function aplicarFiltros() {
@@ -324,34 +343,34 @@
       document.getElementById("m-pct").innerText = pctGlobal + "%";
 
       const cont = document.getElementById("listaContenedor");
-      cont.innerHTML = "";
 
       if (lista.length === 0) {
         cont.innerHTML = `<div style="text-align:center; padding:35px 15px; background:white; border-radius:10px; color:#555; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-            🎉 No hay cupos con el filtro seleccionado para la fecha ${fechaSel}.
+            🎉 No hay cupos con el filtro seleccionado para la fecha ${escapeHTML(fechaSel)}.
           </div>`;
         return;
       }
 
+      let htmlBuffer = "";
       lista.forEach(item => {
         let faltan = item.pro - item.cit;
         let pct = item.pro > 0 ? Math.min(((item.cit / item.pro) * 100), 200).toFixed(1) : "0.0";
         let estado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
 
-        let html = `
+        htmlBuffer += `
           <div class="item-card ${estado}">
             <div class="item-header">
               <div>
-                <div class="item-title">🩺 ${item.especialidad}</div>
-                <div class="item-sub">👨‍⚕️ <b>${item.medico}</b></div>
+                <div class="item-title">🩺 ${escapeHTML(item.especialidad)}</div>
+                <div class="item-sub">👨‍⚕️ <b>${escapeHTML(item.medico)}</b></div>
               </div>
               <span class="badge-estado ${estado}">${estado === 'INCOMPLETO' ? '🟡 FALTAN CITAR' : '🟢 100% LLENO'}</span>
             </div>
 
             <div class="item-info">
-              <div>📌 <b>Actividad:</b> ${item.actividad}</div>
+              <div>📌 <b>Actividad:</b> ${escapeHTML(item.actividad)}</div>
               <div class="info-grid">
-                <div>⏰ <b>Horario:</b> ${item.horario}</div>
+                <div>⏰ <b>Horario:</b> ${escapeHTML(item.horario)}</div>
                 <div>🚨 <b>Cupos Faltantes:</b> <b style="color:${faltan > 0 ? '#d32f2f' : '#2e7d32'}; font-size:13px;">${faltan <= 0 ? 'COMPLETO' : faltan}</b></div>
               </div>
             </div>
@@ -365,8 +384,9 @@
             </div>
           </div>
         `;
-        cont.innerHTML += html;
       });
+
+      cont.innerHTML = htmlBuffer;
     }
   </script>
 </body>
