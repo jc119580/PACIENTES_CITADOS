@@ -52,6 +52,7 @@
     .item-title { font-size: 14px; font-weight: bold; color: #1a237e; text-transform: uppercase; }
     .item-sub { font-size: 11.5px; color: #555; margin-top: 2px; }
     
+    .badge-grupo { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; background: #e8eaf6; color: #1a237e; margin-bottom: 4px; }
     .badge-estado { padding: 4px 8px; border-radius: 12px; font-size: 10.5px; font-weight: bold; text-transform: uppercase; }
     .badge-estado.INCOMPLETO { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .badge-estado.COMPLETO { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
@@ -115,6 +116,17 @@
           <select id="filterFecha" onchange="aplicarFiltros()"></select>
         </div>
         <div class="filter-item">
+          <label>👥 Grupo Ocupacional:</label>
+          <select id="filterGrupo" onchange="aplicarFiltros()">
+            <option value="TODOS" selected>👥 Todos los Grupos</option>
+            <option value="MEDICO">🩺 Médicos (Especialistas / Generales)</option>
+            <option value="OBSTETRICIA">🤰 Obstetricia</option>
+            <option value="ODONTOLOGIA">🦷 Odontología</option>
+            <option value="NUTRICION">🥗 Nutrición</option>
+            <option value="PSICOLOGIA">🧠 Psicología</option>
+          </select>
+        </div>
+        <div class="filter-item">
           <label>📌 Estado de Cupos:</label>
           <select id="filterEstado" onchange="aplicarFiltros()">
             <option value="INCOMPLETO" selected>🟡 INCOMPLETOS (Faltan Citar)</option>
@@ -170,7 +182,6 @@
       return String(txt).replace(/QUIÑ['´]ONEZ/gi, "QUIÑONEZ").trim();
     }
 
-    // Mantiene intacta la fecha si ya viene en DD/MM/YYYY
     function normalizarFecha(strFecha) {
       if (!strFecha) return "S/F";
       const partes = String(strFecha).trim().split("/");
@@ -181,6 +192,27 @@
         return `${d}/${m}/${a}`;
       }
       return strFecha;
+    }
+
+    // CLASIFICADOR AUTOMÁTICO DE GRUPO OCUPACIONAL
+    function obtenerGrupoOcupacional(especialidad) {
+      const esp = (especialidad || "").toUpperCase();
+      if (esp.includes("OBSTETR")) return "OBSTETRICIA";
+      if (esp.includes("ODONTOL")) return "ODONTOLOGIA";
+      if (esp.includes("NUTRICI")) return "NUTRICION";
+      if (esp.includes("PSICOL")) return "PSICOLOGIA";
+      return "MEDICO"; // Todas las especialidades médicas
+    }
+
+    function obtenerEtiquetaGrupo(grupo) {
+      switch(grupo) {
+        case "MEDICO": return "🩺 MÉDICO";
+        case "OBSTETRICIA": return "🤰 OBSTETRICIA";
+        case "ODONTOLOGIA": return "🦷 ODONTOLOGÍA";
+        case "NUTRICION": return "🥗 NUTRICIÓN";
+        case "PSICOLOGIA": return "🧠 PSICOLOGÍA";
+        default: return "👤 PERSONAL SALUD";
+      }
     }
 
     function iniciarSesion() {
@@ -225,6 +257,7 @@
             especialidad: limpiarTexto(item.especialidad),
             actividad: limpiarTexto(item.actividad),
             horario: limpiarTexto(item.horario),
+            grupoOcupacional: obtenerGrupoOcupacional(limpiarTexto(item.especialidad)),
             pro: parseInt(item.pro, 10) || 0,
             cit: parseInt(item.cit, 10) || 0
           }));
@@ -238,7 +271,6 @@
         });
     }
 
-    // Convierte DD/MM/YYYY en YYYYMMDD para ordenamiento correcto
     function convertirFechaAKey(strFecha) {
       if (!strFecha) return 0;
       let partes = strFecha.split("/");
@@ -264,7 +296,6 @@
         return;
       }
 
-      // Ordena de más reciente a más antigua
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
       let optionsBuffer = "";
@@ -273,14 +304,12 @@
       });
       sel.innerHTML = optionsBuffer;
 
-      // FECHA ACTUAL DEL DISPOSITIVO
       const hoy = new Date();
       const d = String(hoy.getDate()).padStart(2, '0');
       const m = String(hoy.getMonth() + 1).padStart(2, '0');
       const a = hoy.getFullYear();
       const fechaHoy = `${d}/${m}/${a}`;
 
-      // SELECCIONA HOY AUTOMÁTICAMENTE
       if (fechasArr.includes(fechaHoy)) {
         sel.value = fechaHoy;
       } else {
@@ -292,11 +321,13 @@
 
     function aplicarFiltros() {
       const fechaSel = document.getElementById("filterFecha").value;
+      const grupoSel = document.getElementById("filterGrupo").value;
       const estadoSel = document.getElementById("filterEstado").value;
       const busqueda = document.getElementById("filterBuscar").value.toLowerCase().trim();
 
       let filtrados = rawDataCitados.filter(item => {
         let matchFecha = (item.fecha === fechaSel);
+        let matchGrupo = (grupoSel === "TODOS" || item.grupoOcupacional === grupoSel);
         let estadoCalculado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
         let matchEstado = (estadoSel === "TODOS" || estadoSel === estadoCalculado);
 
@@ -304,7 +335,7 @@
                          (item.especialidad || "").toLowerCase().includes(busqueda) || 
                          (item.actividad || "").toLowerCase().includes(busqueda);
 
-        return matchFecha && matchEstado && matchTexto;
+        return matchFecha && matchGrupo && matchEstado && matchTexto;
       });
 
       filtrados.sort((a, b) => {
@@ -320,9 +351,12 @@
       let sumPro = 0, sumCit = 0, sumFaltan = 0;
 
       const fechaSel = document.getElementById("filterFecha").value;
-      const listaFechaCompleta = rawDataCitados.filter(i => (i.fecha === fechaSel));
+      const grupoSel = document.getElementById("filterGrupo").value;
 
-      listaFechaCompleta.forEach(item => {
+      // Filtra las métricas superiores respetando fecha y grupo seleccionado
+      const listaMetricas = rawDataCitados.filter(i => (i.fecha === fechaSel) && (grupoSel === "TODOS" || i.grupoOcupacional === grupoSel));
+
+      listaMetricas.forEach(item => {
         sumPro += item.pro;
         sumCit += item.cit;
         let faltan = item.pro - item.cit;
@@ -340,7 +374,7 @@
 
       if (lista.length === 0) {
         cont.innerHTML = `<div style="text-align:center; padding:35px 15px; background:white; border-radius:10px; color:#555; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-            🎉 No hay cupos con el filtro seleccionado para la fecha ${escapeHTML(fechaSel)}.
+            🎉 No hay cupos con los filtros seleccionados.
           </div>`;
         return;
       }
@@ -355,7 +389,8 @@
           <div class="item-card ${estado}">
             <div class="item-header">
               <div>
-                <div class="item-title">🩺 ${escapeHTML(item.especialidad)}</div>
+                <span class="badge-grupo">${obtenerEtiquetaGrupo(item.grupoOcupacional)}</span>
+                <div class="item-title">${escapeHTML(item.especialidad)}</div>
                 <div class="item-sub">👨‍⚕️ <b>${escapeHTML(item.medico)}</b></div>
               </div>
               <span class="badge-estado ${estado}">${estado === 'INCOMPLETO' ? '🟡 FALTAN CITAR' : '🟢 100% LLENO'}</span>
