@@ -170,30 +170,14 @@
       return String(txt).replace(/QUIÑ['´]ONEZ/gi, "QUIÑONEZ").trim();
     }
 
-    // INTERPRETA AMBOS FORMATOS Y REESTRUCTURA SIEMPRE A DD/MM/YYYY
+    // Mantiene intacta la fecha si ya viene en DD/MM/YYYY
     function normalizarFecha(strFecha) {
       if (!strFecha) return "S/F";
       const partes = String(strFecha).trim().split("/");
       if (partes.length === 3) {
-        let p0 = parseInt(partes[0], 10);
-        let p1 = parseInt(partes[1], 10);
+        let d = partes[0].padStart(2, '0');
+        let m = partes[1].padStart(2, '0');
         let a = partes[2];
-
-        // Si detecta formato invertido de EE.UU (09/02/2026 para 2 de Septiembre)
-        if (p0 === 9 && p1 <= 31) {
-          let d = String(p1).padStart(2, '0');
-          let m = "09";
-          return `${d}/${m}/${a}`;
-        }
-        
-        if (p0 <= 12 && p1 > 12) {
-          let d = String(p1).padStart(2, '0');
-          let m = String(p0).padStart(2, '0');
-          return `${d}/${m}/${a}`;
-        }
-
-        let d = String(p0).padStart(2, '0');
-        let m = String(p1).padStart(2, '0');
         return `${d}/${m}/${a}`;
       }
       return strFecha;
@@ -254,6 +238,7 @@
         });
     }
 
+    // Convierte DD/MM/YYYY en YYYYMMDD para ordenamiento correcto
     function convertirFechaAKey(strFecha) {
       if (!strFecha) return 0;
       let partes = strFecha.split("/");
@@ -279,6 +264,7 @@
         return;
       }
 
+      // Ordena de más reciente a más antigua
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
 
       let optionsBuffer = "";
@@ -287,14 +273,14 @@
       });
       sel.innerHTML = optionsBuffer;
 
-      // GENERA LA FECHA ACTUAL (DD/MM/YYYY)
+      // FECHA ACTUAL DEL DISPOSITIVO
       const hoy = new Date();
       const d = String(hoy.getDate()).padStart(2, '0');
       const m = String(hoy.getMonth() + 1).padStart(2, '0');
       const a = hoy.getFullYear();
       const fechaHoy = `${d}/${m}/${a}`;
 
-      // SELECCIÓN AUTOMÁTICA DE HOY
+      // SELECCIONA HOY AUTOMÁTICAMENTE
       if (fechasArr.includes(fechaHoy)) {
         sel.value = fechaHoy;
       } else {
