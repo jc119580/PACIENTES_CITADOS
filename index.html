@@ -52,7 +52,13 @@
     .item-title { font-size: 14px; font-weight: bold; color: #1a237e; text-transform: uppercase; }
     .item-sub { font-size: 11.5px; color: #555; margin-top: 2px; }
     
-    .badge-grupo { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; background: #e8eaf6; color: #1a237e; margin-bottom: 4px; }
+    .badge-grupo { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; margin-bottom: 4px; text-transform: uppercase; }
+    .badge-grupo.MEDICO { background: #e8eaf6; color: #1a237e; }
+    .badge-grupo.OBSTETRICIA { background: #fce4ec; color: #880e4f; }
+    .badge-grupo.ODONTOLOGIA { background: #e0f2f1; color: #004d40; }
+    .badge-grupo.NUTRICION { background: #f1f8e9; color: #33691e; }
+    .badge-grupo.PSICOLOGIA { background: #fff3e0; color: #e65100; }
+
     .badge-estado { padding: 4px 8px; border-radius: 12px; font-size: 10.5px; font-weight: bold; text-transform: uppercase; }
     .badge-estado.INCOMPLETO { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
     .badge-estado.COMPLETO { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
@@ -194,14 +200,17 @@
       return strFecha;
     }
 
-    // CLASIFICADOR AUTOMÁTICO DE GRUPO OCUPACIONAL
+    // CLASIFICADOR EXACTO BASADO EN LAS 20 ESPECIALIDADES REALES
     function obtenerGrupoOcupacional(especialidad) {
-      const esp = (especialidad || "").toUpperCase();
-      if (esp.includes("OBSTETR")) return "OBSTETRICIA";
-      if (esp.includes("ODONTOL")) return "ODONTOLOGIA";
-      if (esp.includes("NUTRICI")) return "NUTRICION";
-      if (esp.includes("PSICOL")) return "PSICOLOGIA";
-      return "MEDICO"; // Todas las especialidades médicas
+      const esp = (especialidad || "").toUpperCase().trim();
+      
+      if (esp === "OBSTETRA") return "OBSTETRICIA";
+      if (esp === "ODONTOLOGIA") return "ODONTOLOGIA";
+      if (esp === "NUTRICION") return "NUTRICION";
+      if (esp === "PSICOLOGIA") return "PSICOLOGIA";
+      
+      // Todas las demás corresponden al grupo Médico / Médicos Especialistas
+      return "MEDICO";
     }
 
     function obtenerEtiquetaGrupo(grupo) {
@@ -353,7 +362,6 @@
       const fechaSel = document.getElementById("filterFecha").value;
       const grupoSel = document.getElementById("filterGrupo").value;
 
-      // Filtra las métricas superiores respetando fecha y grupo seleccionado
       const listaMetricas = rawDataCitados.filter(i => (i.fecha === fechaSel) && (grupoSel === "TODOS" || i.grupoOcupacional === grupoSel));
 
       listaMetricas.forEach(item => {
@@ -374,7 +382,7 @@
 
       if (lista.length === 0) {
         cont.innerHTML = `<div style="text-align:center; padding:35px 15px; background:white; border-radius:10px; color:#555; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-            🎉 No hay cupos con los filtros seleccionados.
+            🎉 No hay cupos con los filtros seleccionados para este grupo ocupacional.
           </div>`;
         return;
       }
@@ -389,7 +397,7 @@
           <div class="item-card ${estado}">
             <div class="item-header">
               <div>
-                <span class="badge-grupo">${obtenerEtiquetaGrupo(item.grupoOcupacional)}</span>
+                <span class="badge-grupo ${item.grupoOcupacional}">${obtenerEtiquetaGrupo(item.grupoOcupacional)}</span>
                 <div class="item-title">${escapeHTML(item.especialidad)}</div>
                 <div class="item-sub">👨‍⚕️ <b>${escapeHTML(item.medico)}</b></div>
               </div>
