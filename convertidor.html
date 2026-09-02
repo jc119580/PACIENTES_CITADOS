@@ -34,11 +34,27 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
+    function excelSerialAFecha(serial) {
+      const n = parseFloat(serial);
+      if (isNaN(n) || n < 10000) return null;
+      const utcDays = Math.floor(n - 25569);
+      const utcValue = utcDays * 86400;
+      const dateInfo = new Date(utcValue * 1000);
+      
+      const d = String(dateInfo.getUTCDate()).padStart(2, '0');
+      const m = String(dateInfo.getUTCMonth() + 1).padStart(2, '0');
+      const a = dateInfo.getUTCFullYear();
+      return `${d}/${m}/${a}`;
+    }
+
     function parseFechaUniversal(val) {
       if (!val) return null;
       let str = String(val).trim();
 
-      // Formato YYYY-MM-DD
+      if (!isNaN(str) && Number(str) > 10000) {
+        return excelSerialAFecha(str);
+      }
+
       let mIso = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
       if (mIso) {
         let d = mIso[3].padStart(2, '0');
@@ -47,26 +63,24 @@
         return `${d}/${m}/${a}`;
       }
 
-      // Formato DD/MM/YYYY o M/D/Y
       let mNorm = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
       if (mNorm) {
-        let p1 = mNorm[1].padStart(2, '0');
-        let p2 = mNorm[2].padStart(2, '0');
+        let p1 = parseInt(mNorm[1], 10);
+        let p2 = parseInt(mNorm[2], 10);
         let a = mNorm[3];
         if (a.length === 2) a = "20" + a;
 
-        // Corregir si día y mes vienen invertidos
-        if (parseInt(p1) <= 12 && parseInt(p2) > 12) {
-          return `${p2}/${p1}/${a}`;
+        if (p1 <= 12 && p2 > 12) {
+          return `${String(p2).padStart(2, '0')}/${String(p1).padStart(2, '0')}/${a}`;
         }
-        return `${p1}/${p2}/${a}`;
+        return `${String(p1).padStart(2, '0')}/${String(p2).padStart(2, '0')}/${a}`;
       }
 
       return null;
     }
 
     function esHorario(cadena) {
-      return /\d{2}:\d{2}\s*-\s*\d{2}:\d{2}/.test(String(cadena));
+      return /\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/.test(String(cadena));
     }
 
     function procesarExcel(file) {
@@ -76,9 +90,9 @@
       reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {type: 'array', cellDates: false});
+          const workbook = XLSX.read(data, { type: 'array', cellDates: false, raw: true });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, raw: false});
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
 
           let resultado = [];
           let currFecha = "";
@@ -112,8 +126,8 @@
               let act = (i + 2 < n && rows[i + 2] && rows[i + 2][0]) ? String(rows[i + 2][0]).trim() : "CONSULTA MEDICA";
 
               let rowAct = rows[i + 2] || [];
-              let pro = parseInt(rowAct[1]) || 0;
-              let cit = parseInt(rowAct[2]) || 0;
+              let pro = parseInt(rowAct[1], 10) || 0;
+              let cit = parseInt(rowAct[2], 10) || 0;
 
               if ((pro > 0 || cit > 0) && currFecha) {
                 resultado.push({
@@ -136,7 +150,7 @@
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron registros en el archivo Excel.");
+            alert("No se encontraron registros válidos en el archivo Excel. Verifique la estructura de las columnas.");
             return;
           }
 
@@ -160,13 +174,14 @@
       }
 
       localStorage.setItem('gh_token', token);
-      status.style.color = "blue";
+      status.style.color = "#1a237e";
       status.innerText = `⏳ Subiendo ${jsonArray.length} registros a GitHub...`;
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `token ${token}`,
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -180,13 +195,13 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = `✅ ¡Éxito! Se subieron ${jsonArray.length} registros de cupos correctamente.`;
+          status.innerText = `✅ ¡Éxito! Se actualizaron ${jsonArray.length} registros de cupos correctamente en GitHub Gist.`;
         } else {
-          throw new Error("Error en el servidor de GitHub");
+          throw new Error(`Respuesta del servidor: HTTP ${res.status}`);
         }
       })
       .catch(err => {
-        status.style.color = "red";
+        status.style.color = "#d32f2f";
         status.innerText = "❌ Error al actualizar: " + err.message;
       });
     }
