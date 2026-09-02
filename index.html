@@ -170,6 +170,7 @@
       return String(txt).replace(/QUIÑ['´]ONEZ/gi, "QUIÑONEZ").trim();
     }
 
+    // NORMALIZA LAS FECHAS SIEMPRE A DD/MM/YYYY
     function normalizarFecha(strFecha) {
       if (!strFecha) return "S/F";
       const partes = String(strFecha).trim().split("/");
@@ -178,9 +179,15 @@
         let p1 = parseInt(partes[1], 10);
         let a = partes[2];
 
-        if (p0 > 12 && p1 <= 12) {
-          let d = String(p0).padStart(2, '0');
-          let m = String(p1).padStart(2, '0');
+        // Corrige si el mes viene primero en formato MM/DD/YYYY (ej. 09/02/2026 -> 02/09/2026)
+        if (p0 <= 12 && p1 <= 31 && p1 > 12) {
+          let d = String(p1).padStart(2, '0');
+          let m = String(p0).padStart(2, '0');
+          return `${d}/${m}/${a}`;
+        } else if (p0 <= 12 && p1 <= 12) {
+          // Si ambos números son <= 12 pero vienen invertidos por exportación de Excel
+          let d = String(p1).padStart(2, '0');
+          let m = String(p0).padStart(2, '0');
           return `${d}/${m}/${a}`;
         }
 
@@ -279,14 +286,14 @@
       });
       sel.innerHTML = optionsBuffer;
 
-      // OBTIENE LA FECHA ACTUAL DEL DISPOSITIVO
+      // GENERA LA FECHA ACTUAL DEL SISTEMA (02/09/2026)
       const hoy = new Date();
       const d = String(hoy.getDate()).padStart(2, '0');
       const m = String(hoy.getMonth() + 1).padStart(2, '0');
       const a = hoy.getFullYear();
       const fechaHoy = `${d}/${m}/${a}`;
 
-      // SI LA FECHA DE HOY ESTÁ EN EL JSON, LA SELECCIONA AUTOMÁTICAMENTE AL INICIAR
+      // SELECCIÓN AUTOMÁTICA EN LA FECHA ACTUAL
       if (fechasArr.includes(fechaHoy)) {
         sel.value = fechaHoy;
       } else {
