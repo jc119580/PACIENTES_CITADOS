@@ -70,7 +70,8 @@
         let a = mNorm[3];
         if (a.length === 2) a = "20" + a;
 
-        if (p1 <= 12 && p2 > 12) {
+        // Inversión cuando viene en formato Mes/Día/Año
+        if (p1 <= 12 && p2 <= 31) {
           return `${String(p2).padStart(2, '0')}/${String(p1).padStart(2, '0')}/${a}`;
         }
         return `${String(p1).padStart(2, '0')}/${String(p2).padStart(2, '0')}/${a}`;
@@ -150,7 +151,7 @@
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron registros válidos en el archivo Excel. Verifique la estructura de las columnas.");
+            alert("No se encontraron registros válidos en el archivo Excel.");
             return;
           }
 
