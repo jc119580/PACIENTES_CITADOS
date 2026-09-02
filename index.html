@@ -200,7 +200,6 @@
       return strFecha;
     }
 
-    // CLASIFICADOR EXACTO BASADO EN LAS 20 ESPECIALIDADES REALES
     function obtenerGrupoOcupacional(especialidad) {
       const esp = (especialidad || "").toUpperCase().trim();
       
@@ -209,7 +208,6 @@
       if (esp === "NUTRICION") return "NUTRICION";
       if (esp === "PSICOLOGIA") return "PSICOLOGIA";
       
-      // Todas las demás corresponden al grupo Médico / Médicos Especialistas
       return "MEDICO";
     }
 
@@ -347,10 +345,11 @@
         return matchFecha && matchGrupo && matchEstado && matchTexto;
       });
 
+      // ORDENAR: Mayor cantidad de cupos faltantes primero, menores al final
       filtrados.sort((a, b) => {
-        let pctA = a.pro > 0 ? (a.cit / a.pro) * 100 : 0;
-        let pctB = b.pro > 0 ? (b.cit / b.pro) * 100 : 0;
-        return pctA - pctB;
+        let faltanA = Math.max(0, a.pro - a.cit);
+        let faltanB = Math.max(0, b.pro - b.cit);
+        return faltanB - faltanA;
       });
 
       renderizar(filtrados);
@@ -382,7 +381,7 @@
 
       if (lista.length === 0) {
         cont.innerHTML = `<div style="text-align:center; padding:35px 15px; background:white; border-radius:10px; color:#555; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-            🎉 No hay cupos con los filtros seleccionados para este grupo ocupacional.
+            🎉 No hay cupos con los filtros seleccionados.
           </div>`;
         return;
       }
