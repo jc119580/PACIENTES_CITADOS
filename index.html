@@ -228,7 +228,11 @@
     function obtenerGrupoOcupacional(especialidad) {
       const esp = (especialidad || "").toUpperCase().trim();
       
-      if (esp === "OBSTETRA" || esp.includes("OBSTETR")) return "OBSTETRICIA";
+      // Si incluye GINECOLOGIA o GINECO, siempre es MÉDICO
+      if (esp.includes("GINEC")) return "MEDICO";
+
+      // Si es exactamente OBSTETRA u OBSTETRICIA (no gineco obstetricia)
+      if (esp === "OBSTETRA" || esp === "OBSTETRICIA") return "OBSTETRICIA";
       if (esp === "ODONTOLOGIA" || esp.includes("ODONTO")) return "ODONTOLOGIA";
       if (esp === "NUTRICION" || esp.includes("NUTRI")) return "NUTRICION";
       if (esp === "PSICOLOGIA" || esp.includes("PSICO")) return "PSICOLOGIA";
@@ -321,7 +325,6 @@
       return 0;
     }
 
-    // CALCULA LOS NO CITADOS ACUMULADOS HASTA AYER (MÉDICOS POR ESPECIALIDAD, NO MÉDICOS POR GRUPO)
     function calcularNoCitadosAcumulados() {
       const hoy = new Date();
       const ayer = new Date(hoy);
@@ -343,10 +346,10 @@
             let etiquetaServicio = "";
 
             if (item.grupoOcupacional === "MEDICO") {
-              // Si es médico -> muestra por su Especialidad concreta (Pediatría, Cardiología, etc.)
+              // Especialidades médicas individuales (Ginecología, Pediatría, etc.)
               etiquetaServicio = item.especialidad || "MÉDICO GENERAL";
             } else {
-              // Si NO es médico -> muestra el nombre general del Grupo (OBSTETRICIA, NUTRICIÓN, etc.)
+              // Agrupado por Profesión No Médica
               etiquetaServicio = item.grupoOcupacional;
             }
 
