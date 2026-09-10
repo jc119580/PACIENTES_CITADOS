@@ -95,6 +95,14 @@
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
 
+          // Capturamos la fecha y hora exacta del momento en que se procesa el archivo
+          const ahora = new Date();
+          const d = String(ahora.getDate()).padStart(2, '0');
+          const m = String(ahora.getMonth() + 1).padStart(2, '0');
+          const a = ahora.getFullYear();
+          const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+          const horaCorteCapturada = `${d}/${m}/${a} — ${horaStr}`;
+
           let resultado = [];
           let currFecha = "";
           let currMedico = "";
@@ -138,7 +146,8 @@
                   actividad: act,
                   horario: hor,
                   pro: pro,
-                  cit: cit
+                  cit: cit,
+                  fecha_corte: horaCorteCapturada
                 });
               }
 
