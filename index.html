@@ -71,9 +71,11 @@
     .panel-turno.tarde .badge-total-turno { background: #f57c00; }
 
     .lista-especialidades-turno { display: flex; flex-direction: column; gap: 6px; }
-    .chip-turno { background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 6px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; }
-    .chip-turno span { font-weight: 600; color: #424242; }
-    .chip-turno b { padding: 2px 6px; border-radius: 4px; font-size: 11.5px; }
+    .chip-turno { background: white; border: 1px solid #e0e0e0; border-radius: 6px; padding: 6px 10px; display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; gap: 8px; }
+    .chip-turno .sub-info { display: flex; flex-direction: column; overflow: hidden; }
+    .chip-turno span.esp-name { font-weight: 700; color: #1a237e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip-turno span.act-name { font-size: 10.5px; color: #666; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip-turno b { padding: 2px 6px; border-radius: 4px; font-size: 11.5px; flex-shrink: 0; }
     .panel-turno.manana .chip-turno b { color: #1565c0; background: #e3f2fd; }
     .panel-turno.tarde .chip-turno b { color: #e65100; background: #fff3e0; }
 
@@ -176,7 +178,7 @@
     <!-- RESUMEN DE CUPOS PENDIENTES DEL DÍA DIVIDIDO POR TURNOS -->
     <div class="no-citados-card dia">
       <div class="no-citados-title dia">
-        <span>📋 Resumen de Cupos Pendientes por Turno y Especialidad</span>
+        <span>📋 Resumen de Cupos Pendientes por Turno, Especialidad y Subactividad</span>
         <span id="etiquetaFechaResumen" style="font-size: 11px; font-weight: normal; color: #666;"></span>
       </div>
       
@@ -235,8 +237,8 @@
       </div>
       <div class="filter-row">
         <div class="filter-item">
-          <label>🔍 Buscar por Médico / Especialidad / Actividad / Turno:</label>
-          <input type="text" id="filterBuscar" onkeyup="aplicarFiltros()" placeholder="Escriba médico, especialidad, Mañana, Tarde...">
+          <label>🔍 Buscar por Médico / Especialidad / Subactividad / Turno:</label>
+          <input type="text" id="filterBuscar" onkeyup="aplicarFiltros()" placeholder="Escriba médico, especialidad, actividad, Mañana, Tarde...">
         </div>
       </div>
     </div>
@@ -292,7 +294,7 @@
       return strFecha;
     }
 
-    // REGLA DE TURNO CORREGIDA: Si inicia ANTES de las 12:00 PM es MAÑANA, de las 12:00 PM en adelante es TARDE.
+    // Identificación de Turno: hora de inicio < 12 AM/PM = MAÑANA, >= 12 = TARDE
     function obtenerNombreTurno(horarioStr) {
       if (!horarioStr) return { nombre: "MAÑANA", clase: "manana" };
       
@@ -301,7 +303,6 @@
 
       const horaInicio = parseInt(horaMatch[1], 10);
 
-      // Si la hora de inicio es menor a 12, es del turno MAÑANA
       if (horaInicio < 12) {
         return { nombre: "MAÑANA", clase: "manana" };
       } else {
@@ -458,10 +459,10 @@
       cont.innerHTML = html;
     }
 
-    // Calcula y agrupa en dos paneles separados (Mañana y Tarde)
+    // Agrupa por Especialidad + Subactividad dentro de cada turno
     function calcularResumenDia(fechaSel, grupoSel) {
-      const especialidadesManana = {};
-      const especialidadesTarde = {};
+      const itemsManana = {};
+      const itemsTarde = {};
       let totalManana = 0;
       let totalTarde = 0;
 
@@ -470,13 +471,15 @@
           let faltan = item.pro - item.cit;
           if (faltan > 0) {
             let especialidad = item.especialidad || "MÉDICO GENERAL";
+            let subactividad = item.actividad || "CONSULTA MEDICA";
+            let clave = `${especialidad}___${subactividad}`;
             let turno = item.turnoObj.nombre;
 
             if (turno === "MAÑANA") {
-              especialidadesManana[especialidad] = (especialidadesManana[especialidad] || 0) + faltan;
+              itemsManana[clave] = (itemsManana[clave] || 0) + faltan;
               totalManana += faltan;
             } else {
-              especialidadesTarde[especialidad] = (especialidadesTarde[especialidad] || 0) + faltan;
+              itemsTarde[clave] = (itemsTarde[clave] || 0) + faltan;
               totalTarde += faltan;
             }
           }
@@ -489,17 +492,21 @@
 
       // Render Mañana
       const contManana = document.getElementById("listaManana");
-      const keysManana = Object.keys(especialidadesManana);
+      const keysManana = Object.keys(itemsManana);
       if (keysManana.length === 0) {
         contManana.innerHTML = `<span style="font-size:11.5px; color:#2e7d32; font-weight:bold;">🟢 Sin cupos pendientes</span>`;
       } else {
-        keysManana.sort((a, b) => especialidadesManana[b] - especialidadesManana[a]);
+        keysManana.sort((a, b) => itemsManana[b] - itemsManana[a]);
         let htmlM = "";
-        keysManana.forEach(esp => {
+        keysManana.forEach(key => {
+          let [esp, act] = key.split("___");
           htmlM += `
             <div class="chip-turno">
-              <span>${escapeHTML(esp)}</span>
-              <b>${especialidadesManana[esp]}</b>
+              <div class="sub-info">
+                <span class="esp-name" title="${escapeHTML(esp)}">${escapeHTML(esp)}</span>
+                <span class="act-name" title="${escapeHTML(act)}">📌 ${escapeHTML(act)}</span>
+              </div>
+              <b>${itemsManana[key]}</b>
             </div>
           `;
         });
@@ -508,17 +515,21 @@
 
       // Render Tarde
       const contTarde = document.getElementById("listaTarde");
-      const keysTarde = Object.keys(especialidadesTarde);
+      const keysTarde = Object.keys(itemsTarde);
       if (keysTarde.length === 0) {
         contTarde.innerHTML = `<span style="font-size:11.5px; color:#2e7d32; font-weight:bold;">🟢 Sin cupos pendientes</span>`;
       } else {
-        keysTarde.sort((a, b) => especialidadesTarde[b] - especialidadesTarde[a]);
+        keysTarde.sort((a, b) => itemsTarde[b] - itemsTarde[a]);
         let htmlT = "";
-        keysTarde.forEach(esp => {
+        keysTarde.forEach(key => {
+          let [esp, act] = key.split("___");
           htmlT += `
             <div class="chip-turno">
-              <span>${escapeHTML(esp)}</span>
-              <b>${especialidadesTarde[esp]}</b>
+              <div class="sub-info">
+                <span class="esp-name" title="${escapeHTML(esp)}">${escapeHTML(esp)}</span>
+                <span class="act-name" title="${escapeHTML(act)}">📌 ${escapeHTML(act)}</span>
+              </div>
+              <b>${itemsTarde[key]}</b>
             </div>
           `;
         });
@@ -644,7 +655,7 @@
             </div>
 
             <div class="item-info">
-              <div>📌 <b>Actividad:</b> ${escapeHTML(item.actividad)}</div>
+              <div>📌 <b>Subactividad:</b> ${escapeHTML(item.actividad)}</div>
               <div class="info-grid">
                 <div>⏰ <b>Horario:</b> ${escapeHTML(item.horario)} (${item.turnoObj.nombre})</div>
                 <div>🚨 <b>Cupos Faltantes:</b> <b style="color:${faltan > 0 ? '#d32f2f' : '#2e7d32'}; font-size:13px;">${faltan <= 0 ? 'COMPLETO' : faltan}</b></div>
