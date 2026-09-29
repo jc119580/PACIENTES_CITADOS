@@ -60,6 +60,7 @@ def procesar_excel_y_github(ruta_txt):
         subprocess.run(["git", "branch", "-M", "main"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "add", "."], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "commit", "-m", "Auto-update: Datos de EsSalud sincronizados"], cwd=CARPETA_PROYECTO)
+        subprocess.run(["git", "pull", "origin", "main", "--rebase"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "push", "-u", "origin", "main"], cwd=CARPETA_PROYECTO)
         print("✅ ¡Publicado con éxito en GitHub!")
 
@@ -87,7 +88,7 @@ def sincronizar():
             print(f"📤 Enviando archivo Excel actualizado a la web: {ARCHIVO_EXCEL}")
             return send_file(ARCHIVO_EXCEL, as_attachment=True)
         else:
-            print("⚠️ No se encontró ningún archivo .TXT en la carpeta Descargas.")
+            print("⚠️️ No se encontró ningún archivo .TXT en la carpeta Descargas.")
             return jsonify({"error": "No hay archivos .txt en la carpeta Descargas."}), 404
 
     except Exception as e:
