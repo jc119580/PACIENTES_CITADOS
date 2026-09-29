@@ -2,31 +2,143 @@ from flask import Flask, jsonify, send_file
 from flask_cors import CORS
 import os
 import glob
+import time
 import subprocess
 import pandas as pd
 import pythoncom
 import win32com.client as win32
+from playwright.sync_api import sync_playwright
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Rutas del sistema
+# Credenciales y rutas del sistema
+USUARIO_ESSALUD = "42283343"
+PASSWORD_ESSALUD = "CANTUARIAS8j"
 CARPETA_DESCARGAS = r"C:\Users\Usuario\Downloads"
 CARPETA_PROYECTO = r"C:\Users\Usuario\Documents\JC\PACIENTES CITADOS"
 ARCHIVO_EXCEL = os.path.join(CARPETA_PROYECTO, "CITADOS DE SETIEMBRE.xlsx")
+
+def descargar_reporte_essalud_headless():
+    """Ejecuta la descarga del reporte en EsSalud totalmente en segundo plano (headless)"""
+    print("\n🤖 Iniciando automatización de descarga en SEGUNDO PLANO...")
+    with sync_playwright() as p:
+        # headless=True para que NO se abra ninguna ventana
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-web-security", "--disable-site-isolation-trials"]
+        )
+        context = browser.new_context(
+            accept_downloads=True,
+            no_viewport=True
+        )
+        page = context.new_page()
+        page.set_default_timeout(180000)
+
+        print("🌐 Conectando a EsSalud en segundo plano...")
+        page.goto("http://appsgasistexpl.essalud.gob.pe/explotaDatos/index.html", wait_until="domcontentloaded")
+        page.wait_for_timeout(3000)
+
+        # Ubicar frame de login
+        frame_login = None
+        for _ in range(20):
+            for f in page.frames:
+                try:
+                    if f.locator("input[name='txtUsuario']").count() > 0:
+                        frame_login = f
+                        break
+                except Exception:
+                    continue
+            if frame_login:
+                break
+            page.wait_for_timeout(500)
+
+        if not frame_login:
+            frame_login = page
+
+        # Credenciales
+        frame_login.locator("input[name='txtUsuario']").first.fill(USUARIO_ESSALUD)
+        frame_login.locator("input[name='txtClave']").first.fill(PASSWORD_ESSALUD)
+
+        cas_select = frame_login.locator("select[name='cmbCas']").first
+        if cas_select.count() > 0:
+            try:
+                cas_select.select_option(label="H.I ALBRECHT")
+            except Exception:
+                opts = cas_select.locator("option").all_text_contents()
+                for o in opts:
+                    if "ALBRECHT" in o.upper():
+                        cas_select.select_option(label=o)
+                        break
+
+        frame_login.locator("input[value='Ingresar']").first.click()
+        page.wait_for_timeout(5000)
+
+        # Menú
+        frame_menu = None
+        for _ in range(20):
+            for f in page.frames:
+                try:
+                    if f.locator("text=CONSULTA EXTERNA").count() > 0:
+                        frame_menu = f
+                        break
+                except Exception:
+                    continue
+            if frame_menu:
+                break
+            page.wait_for_timeout(500)
+
+        if not frame_menu:
+            frame_menu = page
+
+        frame_menu.locator("text=CONSULTA EXTERNA").first.click()
+        page.wait_for_timeout(1000)
+        frame_menu.locator("text=PROG. HORAS EFECTIVAS").first.click()
+        page.wait_for_timeout(2500)
+
+        # Fechas y Formato
+        hoy = datetime.now()
+        fecha_inicio = f"01/{hoy.strftime('%m/%Y')}"
+        ultimo_dia = 31 if hoy.month == 12 else (datetime(hoy.year, hoy.month + 1, 1) - datetime(hoy.year, hoy.month, 1)).days
+        fecha_fin = f"{ultimo_dia:02d}/{hoy.strftime('%m/%Y')}"
+
+        frame_menu.locator("input[name='txtFecIni']").first.fill(fecha_inicio)
+        frame_menu.locator("input[name='txtFecFin']").first.fill(fecha_fin)
+        
+        select_tipo = frame_menu.locator("select[name='cmbTipoArc']").first
+        try:
+            select_tipo.select_option(label="*.TXT para XLS")
+        except Exception:
+            select_tipo.select_option(value="TXT")
+
+        page.wait_for_timeout(1500)
+
+        # Descarga
+        print("📥 Descargando archivo .TXT...")
+        btn_imprimir = frame_menu.locator("input[value='Imprimir']").first
+
+        with page.expect_download(timeout=180000) as download_info:
+            btn_imprimir.click(force=True)
+        
+        download = download_info.value
+        ruta_guardada = os.path.join(CARPETA_DESCARGAS, download.suggested_filename)
+        download.save_as(ruta_guardada)
+        browser.close()
+        
+        print(f"✅ Descarga completada en segundo plano: {ruta_guardada}")
+        return ruta_guardada
 
 def procesar_excel_y_github(ruta_txt):
     """Estructura la Hoja 2, actualiza el rango de origen y refresca las tablas dinámicas de la Hoja 1"""
     try:
         pythoncom.CoInitialize()
 
-        print(f"\n📄 Convertidor activado para: {ruta_txt}")
+        print(f"\n📄 Procesando reporte: {ruta_txt}")
         print("📊 Desglosando datos e inyectando en la Hoja 2...")
         
-        # 1. Leer el TXT separando por '|'
         df_txt = pd.read_csv(ruta_txt, sep='|', encoding='latin1', on_bad_lines='skip', dtype=str)
 
-        # 2. Abrir Excel mediante win32com
         excel = win32.gencache.EnsureDispatch('Excel.Application')
         excel.Visible = False
         excel.DisplayAlerts = False
@@ -35,10 +147,8 @@ def procesar_excel_y_github(ruta_txt):
         ws_hoja1 = wb.Worksheets(1)
         ws_hoja2 = wb.Worksheets(2)
 
-        # Limpiar datos anteriores de la Hoja 2
         ws_hoja2.Cells.Clear()
 
-        # Preparar matriz de datos
         headers = [str(col).strip() for col in df_txt.columns]
         filas = [[str(val).strip() if pd.notna(val) else "" for val in row] for row in df_txt.values]
         
@@ -46,7 +156,6 @@ def procesar_excel_y_github(ruta_txt):
         num_filas = len(matriz_completa)
         num_cols = len(headers)
 
-        # Inyectar datos en la Hoja 2
         rango_destino = ws_hoja2.Range(
             ws_hoja2.Cells(1, 1),
             ws_hoja2.Cells(num_filas, num_cols)
@@ -55,52 +164,39 @@ def procesar_excel_y_github(ruta_txt):
 
         print("🔄 Redefiniendo origen de datos y actualizando Tablas Dinámicas en Hoja 1...")
         
-        # Determinar el nombre de la Hoja 2 para la referencia de rango de la tabla dinámica
         nombre_hoja2 = ws_hoja2.Name
-        # Obtener la letra de la última columna
-        def col_to_letter(col_idx):
-            letter = ''
-            while col_idx > 0:
-                col_idx, remainder = divmod(col_idx - 1, 26)
-                letter = chr(65 + remainder) + letter
-            return letter
-
-        ultima_col_letra = col_to_letter(num_cols)
         nuevo_rango_origen = f"'{nombre_hoja2}'!R1C1:R{num_filas}C{num_cols}"
 
-        # Refrescar y actualizar el rango origen de cada Tabla Dinámica en la Hoja 1
         for pt in ws_hoja1.PivotTables():
             try:
                 pt.ChangePivotCache(
                     wb.PivotCaches().Create(
-                        SourceType=1, # xlDatabase
+                        SourceType=1,
                         SourceData=nuevo_rango_origen
                     )
                 )
                 pt.Update()
-            except Exception as e_pt:
-                print(f"⚠️ Nota al actualizar tabla dinámica: {str(e_pt)}")
+            except Exception:
+                pass
 
-        # Refresco global de seguridad
         wb.RefreshAll()
         excel.CalculateUntilAsyncQueriesDone()
         
         wb.Save()
         wb.Close()
         excel.Quit()
-        print("✅ ¡Tablas dinámicas y datos de Hoja 1/Hoja 2 actualizados al 100%!")
+        print("✅ Excel actualizado y guardado correctamente.")
 
-        # 3. Subir cambios a GitHub
-        print("🚀 Sincronizando con GitHub...")
+        print("🚀 Subiendo a GitHub...")
         subprocess.run(["git", "branch", "-M", "main"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "add", "."], cwd=CARPETA_PROYECTO)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Rango de tabla dinámica y Hoja 2 actualizados"], cwd=CARPETA_PROYECTO)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Proceso en segundo plano ejecutado"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "pull", "origin", "main", "--rebase"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "push", "-u", "origin", "main"], cwd=CARPETA_PROYECTO)
-        print("✅ ¡Publicado con éxito en GitHub!")
+        print("✅ ¡Publicado en GitHub!")
 
     except Exception as e:
-        print(f"⚠️ Error en el procesamiento: {str(e)}")
+        print(f"⚠️ Error en procesamiento: {str(e)}")
     finally:
         pythoncom.CoUninitialize()
 
@@ -110,21 +206,25 @@ def sincronizar():
         print("\n--------------------------------------------------")
         print("🔄 Petición de sincronización recibida...")
         
-        # Buscar el archivo .TXT más reciente en Descargas
-        archivos_txt = sorted(
-            glob.glob(os.path.join(CARPETA_DESCARGAS, "*.txt")),
-            key=os.path.getmtime,
-            reverse=True
-        )
+        ruta_txt = None
+        try:
+            # Intentar descarga automatizada en segundo plano
+            ruta_txt = descargar_reporte_essalud_headless()
+        except Exception as e_bot:
+            print(f"⚠️ Bot en segundo plano no completó ({e_bot}). Usando el archivo .TXT más reciente en Descargas...")
+            archivos_txt = sorted(
+                glob.glob(os.path.join(CARPETA_DESCARGAS, "*.txt")),
+                key=os.path.getmtime,
+                reverse=True
+            )
+            if archivos_txt:
+                ruta_txt = archivos_txt[0]
 
-        if archivos_txt:
-            ruta_txt = archivos_txt[0]
+        if ruta_txt and os.path.exists(ruta_txt):
             procesar_excel_y_github(ruta_txt)
-            print(f"📤 Enviando archivo Excel actualizado a la web: {ARCHIVO_EXCEL}")
             return send_file(ARCHIVO_EXCEL, as_attachment=True)
         else:
-            print("⚠️ No se encontró ningún archivo .TXT en la carpeta Descargas.")
-            return jsonify({"error": "No hay archivos .txt en la carpeta Descargas."}), 404
+            return jsonify({"error": "No se encontró ningún archivo .txt en Descargas."}), 404
 
     except Exception as e:
         print(f"❌ Error durante el proceso: {str(e)}")
