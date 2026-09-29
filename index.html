@@ -262,7 +262,7 @@
       btn.disabled = true; btn.innerText = "⌛ Sincronizando...";
 
       try {
-        const respuesta = await fetch('http://localhost:5000/api/sincronizar', { method: 'POST' });
+        const respuesta = await fetch('http://172.30.146.52:5000/api/sincronizar', { method: 'POST' });
         if (!respuesta.ok) {
           const err = await respuesta.json();
           throw new Error(err.error || "Error al conectar con bot_local.py en Windows.");
