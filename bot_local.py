@@ -2,7 +2,6 @@ from flask import Flask, jsonify, send_file
 from flask_cors import CORS
 import os
 import glob
-import time
 import subprocess
 import pandas as pd
 import pythoncom
@@ -13,7 +12,7 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Credenciales y rutas del sistema
+# Credenciales y Rutas configuradas
 USUARIO_ESSALUD = "42283343"
 PASSWORD_ESSALUD = "CANTUARIAS8j"
 CARPETA_DESCARGAS = r"C:\Users\Usuario\Downloads"
@@ -21,26 +20,22 @@ CARPETA_PROYECTO = r"C:\Users\Usuario\Documents\JC\PACIENTES CITADOS"
 ARCHIVO_EXCEL = os.path.join(CARPETA_PROYECTO, "CITADOS DE SETIEMBRE.xlsx")
 
 def descargar_reporte_essalud_headless():
-    """Ejecuta la descarga del reporte en EsSalud totalmente en segundo plano (headless)"""
+    """Conecta a EsSalud, inicia sesión y descarga el .TXT automáticamente en segundo plano"""
     print("\n🤖 Iniciando automatización de descarga en SEGUNDO PLANO...")
     with sync_playwright() as p:
-        # headless=True para que NO se abra ninguna ventana
         browser = p.chromium.launch(
             headless=True,
             args=["--disable-web-security", "--disable-site-isolation-trials"]
         )
-        context = browser.new_context(
-            accept_downloads=True,
-            no_viewport=True
-        )
+        context = browser.new_context(accept_downloads=True, no_viewport=True)
         page = context.new_page()
         page.set_default_timeout(180000)
 
-        print("🌐 Conectando a EsSalud en segundo plano...")
+        print("🌐 Conectando a EsSalud...")
         page.goto("http://appsgasistexpl.essalud.gob.pe/explotaDatos/index.html", wait_until="domcontentloaded")
         page.wait_for_timeout(3000)
 
-        # Ubicar frame de login
+        # 1. Localizar el frame de login
         frame_login = None
         for _ in range(20):
             for f in page.frames:
@@ -57,7 +52,8 @@ def descargar_reporte_essalud_headless():
         if not frame_login:
             frame_login = page
 
-        # Credenciales
+        # 2. Iniciar sesión con tus credenciales
+        print("🔑 Autenticando con credenciales...")
         frame_login.locator("input[name='txtUsuario']").first.fill(USUARIO_ESSALUD)
         frame_login.locator("input[name='txtClave']").first.fill(PASSWORD_ESSALUD)
 
@@ -75,7 +71,7 @@ def descargar_reporte_essalud_headless():
         frame_login.locator("input[value='Ingresar']").first.click()
         page.wait_for_timeout(5000)
 
-        # Menú
+        # 3. Navegar en el menú
         frame_menu = None
         for _ in range(20):
             for f in page.frames:
@@ -92,17 +88,19 @@ def descargar_reporte_essalud_headless():
         if not frame_menu:
             frame_menu = page
 
+        print("📍 Seleccionando 'CONSULTA EXTERNA' > 'PROG. HORAS EFECTIVAS'...")
         frame_menu.locator("text=CONSULTA EXTERNA").first.click()
         page.wait_for_timeout(1000)
         frame_menu.locator("text=PROG. HORAS EFECTIVAS").first.click()
         page.wait_for_timeout(2500)
 
-        # Fechas y Formato
+        # 4. Configurar fechas del mes actual y selector TXT
         hoy = datetime.now()
         fecha_inicio = f"01/{hoy.strftime('%m/%Y')}"
         ultimo_dia = 31 if hoy.month == 12 else (datetime(hoy.year, hoy.month + 1, 1) - datetime(hoy.year, hoy.month, 1)).days
         fecha_fin = f"{ultimo_dia:02d}/{hoy.strftime('%m/%Y')}"
 
+        print(f"📅 Rango configurado: {fecha_inicio} al {fecha_fin}")
         frame_menu.locator("input[name='txtFecIni']").first.fill(fecha_inicio)
         frame_menu.locator("input[name='txtFecFin']").first.fill(fecha_fin)
         
@@ -114,8 +112,8 @@ def descargar_reporte_essalud_headless():
 
         page.wait_for_timeout(1500)
 
-        # Descarga
-        print("📥 Descargando archivo .TXT...")
+        # 5. Descargar reporte automáticamente
+        print("📥 Disparando descarga del archivo .TXT...")
         btn_imprimir = frame_menu.locator("input[value='Imprimir']").first
 
         with page.expect_download(timeout=180000) as download_info:
@@ -130,12 +128,12 @@ def descargar_reporte_essalud_headless():
         return ruta_guardada
 
 def procesar_excel_y_github(ruta_txt):
-    """Estructura la Hoja 2, actualiza el rango de origen y refresca las tablas dinámicas de la Hoja 1"""
+    """Procesa el TXT, actualiza la Hoja 2, reajusta las tablas dinámicas de la Hoja 1 y sube a GitHub"""
     try:
         pythoncom.CoInitialize()
 
-        print(f"\n📄 Procesando reporte: {ruta_txt}")
-        print("📊 Desglosando datos e inyectando en la Hoja 2...")
+        print(f"\n📄 Procesando archivo: {ruta_txt}")
+        print("📊 Inyectando datos en la Hoja 2...")
         
         df_txt = pd.read_csv(ruta_txt, sep='|', encoding='latin1', on_bad_lines='skip', dtype=str)
 
@@ -162,8 +160,7 @@ def procesar_excel_y_github(ruta_txt):
         )
         rango_destino.Value = matriz_completa
 
-        print("🔄 Redefiniendo origen de datos y actualizando Tablas Dinámicas en Hoja 1...")
-        
+        print("🔄 Redefiniendo origen y actualizando Tablas Dinámicas...")
         nombre_hoja2 = ws_hoja2.Name
         nuevo_rango_origen = f"'{nombre_hoja2}'!R1C1:R{num_filas}C{num_cols}"
 
@@ -187,16 +184,16 @@ def procesar_excel_y_github(ruta_txt):
         excel.Quit()
         print("✅ Excel actualizado y guardado correctamente.")
 
-        print("🚀 Subiendo a GitHub...")
+        print("🚀 Publicando cambios en GitHub...")
         subprocess.run(["git", "branch", "-M", "main"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "add", "."], cwd=CARPETA_PROYECTO)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Proceso en segundo plano ejecutado"], cwd=CARPETA_PROYECTO)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Descarga automática y tablas dinámicas sincronizadas"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "pull", "origin", "main", "--rebase"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "push", "-u", "origin", "main"], cwd=CARPETA_PROYECTO)
-        print("✅ ¡Publicado en GitHub!")
+        print("✅ ¡Publicado con éxito en GitHub!")
 
     except Exception as e:
-        print(f"⚠️ Error en procesamiento: {str(e)}")
+        print(f"⚠️ Error procesando Excel/Git: {str(e)}")
     finally:
         pythoncom.CoUninitialize()
 
@@ -208,10 +205,10 @@ def sincronizar():
         
         ruta_txt = None
         try:
-            # Intentar descarga automatizada en segundo plano
+            # 1. Intentar la descarga automática en segundo plano
             ruta_txt = descargar_reporte_essalud_headless()
         except Exception as e_bot:
-            print(f"⚠️ Bot en segundo plano no completó ({e_bot}). Usando el archivo .TXT más reciente en Descargas...")
+            print(f"⚠️ Descarga directa en vivo no disponible ({e_bot}). Usando el archivo .TXT más reciente...")
             archivos_txt = sorted(
                 glob.glob(os.path.join(CARPETA_DESCARGAS, "*.txt")),
                 key=os.path.getmtime,
@@ -224,7 +221,7 @@ def sincronizar():
             procesar_excel_y_github(ruta_txt)
             return send_file(ARCHIVO_EXCEL, as_attachment=True)
         else:
-            return jsonify({"error": "No se encontró ningún archivo .txt en Descargas."}), 404
+            return jsonify({"error": "No hay ningún archivo disponible para procesar."}), 404
 
     except Exception as e:
         print(f"❌ Error durante el proceso: {str(e)}")
