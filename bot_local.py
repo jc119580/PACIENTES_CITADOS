@@ -18,6 +18,7 @@ ARCHIVO_EXCEL = os.path.join(CARPETA_PROYECTO, "CITADOS DE SETIEMBRE.xlsx")
 def procesar_excel_y_github(ruta_txt):
     """Lee el TXT descargado, actualiza la Hoja 2, refresca la Hoja 1 y sube a GitHub"""
     try:
+        # Inicializar el entorno COM de Windows para el hilo secundario
         pythoncom.CoInitialize()
 
         print(f"\n📄 Archivo .TXT encontrado en Descargas: {ruta_txt}")
@@ -26,7 +27,7 @@ def procesar_excel_y_github(ruta_txt):
         # 1. Leer el TXT separado por tabuladores
         df_txt = pd.read_csv(ruta_txt, sep='\t', encoding='latin1', on_bad_lines='skip')
 
-        # 2. Abrir Excel mediante la API de Windows
+        # 2. Abrir Excel mediante la API nativa de Windows (win32com)
         excel = win32.gencache.EnsureDispatch('Excel.Application')
         excel.Visible = False
         excel.DisplayAlerts = False
@@ -39,7 +40,7 @@ def procesar_excel_y_github(ruta_txt):
         for col_num, col_name in enumerate(df_txt.columns, 1):
             ws_hoja2.Cells(1, col_num).Value = str(col_name)
 
-        # Escribir Filas
+        # Escribir Filas de datos
         datos = df_txt.values.tolist()
         for row_idx, row_data in enumerate(datos, 2):
             for col_idx, val in enumerate(row_data, 1):
@@ -54,15 +55,16 @@ def procesar_excel_y_github(ruta_txt):
         excel.Quit()
         print("✅ Excel 'CITADOS DE SETIEMBRE.xlsx' actualizado y guardado correctamente.")
 
-        # 3. Git Push a GitHub
+        # 3. Subir cambios automáticamente a GitHub en la rama 'main'
         print("🚀 Sincronizando con GitHub...")
+        subprocess.run(["git", "branch", "-M", "main"], cwd=CARPETA_PROYECTO)
         subprocess.run(["git", "add", "."], cwd=CARPETA_PROYECTO)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Datos sincronizados"], cwd=CARPETA_PROYECTO)
-        subprocess.run(["git", "push", "origin", "main"], cwd=CARPETA_PROYECTO)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Datos de EsSalud sincronizados"], cwd=CARPETA_PROYECTO)
+        subprocess.run(["git", "push", "-u", "origin", "main"], cwd=CARPETA_PROYECTO)
         print("✅ ¡Publicado con éxito en GitHub!")
 
     except Exception as e:
-        print(f"⚠️ Nota sobre Git/Excel: {str(e)}")
+        print(f"⚠️ Nota procesando Excel/Git: {str(e)}")
     finally:
         pythoncom.CoUninitialize()
 
