@@ -8,25 +8,31 @@
   <meta http-equiv="Expires" content="0">
   <title>Control de Pacientes Citados - Hospital Albrecht</title>
 
+  <!-- SheetJS para procesamiento de Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
   <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #f0f2f5; color: #333; }
     
-    /* MODAL DE LOGIN */
     #login-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(26, 35, 126, 0.95); display: flex; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(5px); }
     .login-card { background: white; padding: 28px 20px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); text-align: center; }
     .login-card h3 { margin-top: 0; color: #1a237e; font-size: 18px; margin-bottom: 4px; }
-    .login-card input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #CED4DA; border-radius: 8px; font-size: 14px; box-sizing: border-box; outline: none; }
+    .login-card input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #CED4DA; border-radius: 8px; font-size: 14px; outline: none; }
     .btn-login { width: 100%; padding: 12px; background: #1a237e; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; margin-top: 10px; }
     #login-error { color: #DC3545; font-size: 12px; font-weight: bold; margin-top: 10px; display: none; }
 
     header { background: #1a237e; color: white; padding: 12px 16px; font-size: 16px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
     .container { padding: 12px; max-width: 1000px; margin: auto; }
     
-    /* CORTE INFO */
     .corte-badge { text-align: right; font-size: 11.5px; font-weight: bold; color: #1a237e; margin-bottom: 8px; }
 
-    /* RESUMEN DE MÉTRICAS */
+    .config-card { background: white; border-radius: 10px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-left: 5px solid #1a237e; }
+    .config-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .config-item { flex: 1; min-width: 180px; }
+    .config-item label { font-size: 11px; font-weight: bold; color: #1a237e; display: block; margin-bottom: 4px; }
+    .config-item input { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #c5cae9; font-size: 12px; outline: none; }
+
     .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
     .metric-card { background: white; border-radius: 10px; padding: 10px 6px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-bottom: 4px solid #1a237e; }
     .metric-card.faltan { border-bottom-color: #d32f2f; background: #fff8f8; }
@@ -40,7 +46,6 @@
       .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
     }
 
-    /* SECCIONES DE RESUMEN EN TARJETAS */
     .no-citados-card { background: white; border-radius: 10px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-left: 5px solid #d32f2f; }
     .no-citados-card.dia { border-left-color: #e65100; }
     .no-citados-title { font-size: 13px; font-weight: bold; color: #c62828; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px; }
@@ -51,7 +56,6 @@
     .servicio-chip span { font-weight: 600; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
     .servicio-chip b { color: #d32f2f; font-size: 12px; background: #ffebee; padding: 2px 6px; border-radius: 4px; }
 
-    /* ESTRUCTURA POR TURNOS (DOBLE COLUMNA) */
     .turnos-resumen-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 8px; }
     @media (max-width: 650px) {
       .turnos-resumen-container { grid-template-columns: 1fr; }
@@ -79,14 +83,12 @@
     .panel-turno.manana .chip-turno b { color: #1565c0; background: #e3f2fd; }
     .panel-turno.tarde .chip-turno b { color: #e65100; background: #fff3e0; }
 
-    /* FILTROS */
     .filter-card { background: white; border-radius: 10px; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 8px; }
     .filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .filter-item { flex: 1; min-width: 140px; }
     .filter-item label { font-size: 11px; font-weight: bold; color: #1a237e; display: block; margin-bottom: 4px; }
     .filter-item select, .filter-item input { width: 100%; padding: 9px; border-radius: 6px; border: 1px solid #c5cae9; font-size: 13px; outline: none; background: white; cursor: pointer; }
 
-    /* TARJETAS */
     .item-card { background: white; border-radius: 10px; border: 1px solid #e0e0e0; border-left: 6px solid #f57f17; margin-bottom: 10px; padding: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.04); }
     .item-card.COMPLETO { border-left-color: #2e7d32; }
     
@@ -104,7 +106,6 @@
     .badge-turno { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; margin-left: 4px; }
     .badge-turno.manana { background: #e3f2fd; color: #0d47a1; }
     .badge-turno.tarde { background: #fff3e0; color: #e65100; }
-    .badge-turno.noche { background: #ede7f6; color: #4a148c; }
 
     .badge-estado { padding: 4px 8px; border-radius: 12px; font-size: 10.5px; font-weight: bold; text-transform: uppercase; }
     .badge-estado.INCOMPLETO { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
@@ -122,7 +123,6 @@
 </head>
 <body>
 
-  <!-- LOGIN -->
   <div id="login-overlay">
     <div class="login-card">
       <h3>🏥 PACIENTES CITADOS</h3>
@@ -136,79 +136,68 @@
 
   <header>
     <span>🏥 Cupos y Pacientes Citados</span>
-    <button onclick="cerrarSesion()" style="background:#dc3545; color:white; border:none; padding:5px 12px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;">🔒 Salir</button>
+    <div style="display: flex; gap: 8px;">
+      <button id="btnSincronizarIndex" onclick="sincronizarDatosDesdeIndex()" style="background:#2e7d32; color:white; border:none; padding:5px 12px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;">🔄 Sincronizar</button>
+      <button onclick="cerrarSesion()" style="background:#dc3545; color:white; border:none; padding:5px 12px; border-radius:6px; font-weight:bold; cursor:pointer; font-size:12px;">🔒 Salir</button>
+    </div>
   </header>
 
   <div class="container" id="contenidoPrincipal" style="display:none;">
-
-    <!-- HORA DE CORTE -->
     <div id="infoCorte" class="corte-badge"></div>
 
-    <!-- CUADRO DE MÉTRICAS -->
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-val" id="m-pro">0</div>
-        <div class="metric-lbl">📋 Oferta Cupos</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-val" id="m-cit">0</div>
-        <div class="metric-lbl">👥 Citados</div>
-      </div>
-      <div class="metric-card faltan">
-        <div class="metric-val" id="m-faltan">0</div>
-        <div class="metric-lbl">🚨 Faltan Citar</div>
-      </div>
-      <div class="metric-card incompletos">
-        <div class="metric-val" id="m-pct">0%</div>
-        <div class="metric-lbl">📊 % Avance</div>
+    <div class="config-card">
+      <div class="config-row">
+        <div class="config-item">
+          <label>🔑 GitHub Token (Para actualizar Gist):</label>
+          <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" onchange="localStorage.setItem('gh_token', this.value.trim())">
+        </div>
+        <div class="config-item">
+          <label>🆔 Gist ID:</label>
+          <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
+        </div>
       </div>
     </div>
 
-    <!-- RESUMEN PACIENTES NO CITADOS ACUMULADOS HASTA AYER -->
+    <div class="metrics-grid">
+      <div class="metric-card"><div class="metric-val" id="m-pro">0</div><div class="metric-lbl">📋 Oferta Cupos</div></div>
+      <div class="metric-card"><div class="metric-val" id="m-cit">0</div><div class="metric-lbl">👥 Citados</div></div>
+      <div class="metric-card faltan"><div class="metric-val" id="m-faltan">0</div><div class="metric-lbl">🚨 Faltan Citar</div></div>
+      <div class="metric-card incompletos"><div class="metric-val" id="m-pct">0%</div><div class="metric-lbl">📊 % Avance</div></div>
+    </div>
+
     <div class="no-citados-card">
       <div class="no-citados-title">
         <span>🚨 Pacientes No Citados por Servicio (Acumulado Hasta Ayer)</span>
         <span id="rangoFechasNoCitados" style="font-size: 11px; font-weight: normal; color: #666;"></span>
       </div>
-      <div id="contenedorNoCitados" class="no-citados-grid">
-        <span style="font-size:11px; color:#666;">Cargando acumulado...</span>
-      </div>
+      <div id="contenedorNoCitados" class="no-citados-grid"><span style="font-size:11px; color:#666;">Cargando...</span></div>
     </div>
 
-    <!-- RESUMEN DE CUPOS PENDIENTES DEL DÍA DIVIDIDO POR TURNOS -->
     <div class="no-citados-card dia">
       <div class="no-citados-title dia">
         <span>📋 Resumen de Cupos Pendientes por Turno, Especialidad y Subactividad</span>
         <span id="etiquetaFechaResumen" style="font-size: 11px; font-weight: normal; color: #666;"></span>
       </div>
       
-      <!-- Contenedor dividido en 2 columnas: Mañana y Tarde -->
       <div class="turnos-resumen-container">
-        <!-- Panel Turno Mañana -->
         <div class="panel-turno manana">
           <div class="header-turno">
             <h4>☀️ Turno Mañana</h4>
             <span class="badge-total-turno" id="totalPendientesManana">0</span>
           </div>
-          <div class="lista-especialidades-turno" id="listaManana">
-            <span style="font-size:11px; color:#666;">Sin pendientes</span>
-          </div>
+          <div class="lista-especialidades-turno" id="listaManana"><span style="font-size:11px; color:#666;">Sin pendientes</span></div>
         </div>
 
-        <!-- Panel Turno Tarde -->
         <div class="panel-turno tarde">
           <div class="header-turno">
             <h4>🌅 Turno Tarde</h4>
             <span class="badge-total-turno" id="totalPendientesTarde">0</span>
           </div>
-          <div class="lista-especialidades-turno" id="listaTarde">
-            <span style="font-size:11px; color:#666;">Sin pendientes</span>
-          </div>
+          <div class="lista-especialidades-turno" id="listaTarde"><span style="font-size:11px; color:#666;">Sin pendientes</span></div>
         </div>
       </div>
     </div>
 
-    <!-- FILTROS -->
     <div class="filter-card">
       <div class="filter-row">
         <div class="filter-item">
@@ -238,16 +227,17 @@
       <div class="filter-row">
         <div class="filter-item">
           <label>🔍 Buscar por Médico / Especialidad / Subactividad / Turno:</label>
-          <input type="text" id="filterBuscar" onkeyup="aplicarFiltros()" placeholder="Escriba médico, especialidad, actividad, Mañana, Tarde...">
+          <input type="text" id="filterBuscar" onkeyup="aplicarFiltros()" placeholder="Buscar...">
         </div>
       </div>
     </div>
 
     <div id="listaContenedor">Cargando cupos disponibles...</div>
-
   </div>
 
   <script>
+    document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
+
     const DNI_PERMITIDOS = [
       "06275632", "06288704", "15682236", "16785312", "16805097", "17800297", 
       "17803645", "17803902", "17804999", "17805445", "17810413", "17817271", 
@@ -267,14 +257,122 @@
 
     let rawDataCitados = [];
 
+    async function sincronizarDatosDesdeIndex() {
+      const btn = document.getElementById('btnSincronizarIndex');
+      btn.disabled = true; btn.innerText = "⌛ Sincronizando...";
+
+      try {
+        const respuesta = await fetch('http://localhost:5000/api/sincronizar', { method: 'POST' });
+        if (!respuesta.ok) {
+          const err = await respuesta.json();
+          throw new Error(err.error || "Error al conectar con bot_local.py en Windows.");
+        }
+        const blob = await respuesta.blob();
+        procesarExcelDescargado(new File([blob], "TablaDinamicaActualizada.xlsx"));
+      } catch (error) {
+        alert("❌ Error durante la sincronización: " + error.message);
+        btn.disabled = false; btn.innerText = "🔄 Sincronizar";
+      }
+    }
+
+    function excelSerialAFecha(serial) {
+      const n = parseFloat(serial);
+      if (isNaN(n) || n < 10000) return null;
+      const utcDays = Math.floor(n - 25569);
+      const utcValue = utcDays * 86400;
+      const dateInfo = new Date(utcValue * 1000);
+      return `${String(dateInfo.getUTCDate()).padStart(2, '0')}/${String(dateInfo.getUTCMonth() + 1).padStart(2, '0')}/${dateInfo.getUTCFullYear()}`;
+    }
+
+    function parseFechaUniversal(val) {
+      if (!val) return null;
+      let str = String(val).trim();
+      if (!isNaN(str) && Number(str) > 10000) return excelSerialAFecha(str);
+
+      let mIso = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (mIso) return `${mIso[3].padStart(2, '0')}/${mIso[2].padStart(2, '0')}/${mIso[1]}`;
+
+      let mNorm = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+      if (mNorm) {
+        let p1 = parseInt(mNorm[1], 10), p2 = parseInt(mNorm[2], 10), a = mNorm[3];
+        if (a.length === 2) a = "20" + a;
+        if (p1 <= 12 && p2 <= 31) return `${String(p2).padStart(2, '0')}/${String(p1).padStart(2, '0')}/${a}`;
+        return `${String(p1).padStart(2, '0')}/${String(p2).padStart(2, '0')}/${a}`;
+      }
+      return null;
+    }
+
+    function esHorario(cadena) {
+      return /\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/.test(String(cadena));
+    }
+
+    function procesarExcelDescargado(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: false, raw: true });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
+
+          const ahora = new Date();
+          const horaCorteCapturada = `${String(ahora.getDate()).padStart(2, '0')}/${String(ahora.getMonth() + 1).padStart(2, '0')}/${ahora.getFullYear()} — ${ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+
+          let resultado = [], currFecha = "", currMedico = "", i = 0, n = rows.length;
+
+          while (i < n) {
+            let row = rows[i];
+            if (!row || row.length === 0) { i++; continue; }
+            let col0 = row[0] ? String(row[0]).trim() : "", col0Upper = col0.toUpperCase();
+
+            if (!col0 || col0Upper.includes("TOTAL GENERAL") || col0Upper.includes("ETIQUETAS DE FILA") || col0Upper.includes("CODACTI")) {
+              i++; continue;
+            }
+
+            let fechaDetectada = parseFechaUniversal(col0);
+            if (fechaDetectada) { currFecha = fechaDetectada; currMedico = ""; i++; continue; }
+
+            if (esHorario(col0)) {
+              let hor = col0;
+              let esp = (i + 1 < n && rows[i + 1] && rows[i + 1][0]) ? String(rows[i + 1][0]).trim() : "CONSULTA EXTERNA";
+              let act = (i + 2 < n && rows[i + 2] && rows[i + 2][0]) ? String(rows[i + 2][0]).trim() : "CONSULTA MEDICA";
+              let rowAct = rows[i + 2] || [];
+              let pro = parseInt(rowAct[1], 10) || 0, cit = parseInt(rowAct[2], 10) || 0;
+
+              if ((pro > 0 || cit > 0) && currFecha) {
+                resultado.push({ fecha: currFecha, medico: currMedico || "MÉDICO GENERAL", especialidad: esp, actividad: act, horario: hor, pro: pro, cit: cit, fecha_corte: horaCorteCapturada });
+              }
+              i += 3; continue;
+            } else { currMedico = col0; i++; }
+          }
+          if (resultado.length === 0) { alert("⚠️ No se encontraron registros válidos."); return; }
+          subirAGist(resultado);
+        } catch(err) { alert("❌ Error al procesar Excel: " + err.message); }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function subirAGist(jsonArray) {
+      const token = document.getElementById('ghToken').value.trim(), gistId = document.getElementById('gistId').value.trim(), btn = document.getElementById('btnSincronizarIndex');
+      if(!token || !gistId) { alert("⚠️ Ingrese su Token de GitHub."); btn.disabled = false; btn.innerText = "🔄 Sincronizar"; return; }
+      localStorage.setItem('gh_token', token);
+
+      fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: { "pacientes_citados.json": { content: JSON.stringify(jsonArray, null, 2) } } })
+      })
+      .then(res => {
+        if(res.ok) { alert(`✅ ¡Actualizados ${jsonArray.length} registros!`); cargarDatosApp(); }
+        else { throw new Error(`HTTP ${res.status}`); }
+      })
+      .catch(err => alert("❌ Error al actualizar Gist: " + err.message))
+      .finally(() => { btn.disabled = false; btn.innerText = "🔄 Sincronizar"; });
+    }
+
     function escapeHTML(str) {
       if (!str) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
     function limpiarTexto(txt) {
@@ -285,41 +383,24 @@
     function normalizarFecha(strFecha) {
       if (!strFecha) return "S/F";
       const partes = String(strFecha).trim().split("/");
-      if (partes.length === 3) {
-        let d = partes[0].padStart(2, '0');
-        let m = partes[1].padStart(2, '0');
-        let a = partes[2];
-        return `${d}/${m}/${a}`;
-      }
+      if (partes.length === 3) return `${partes[0].padStart(2, '0')}/${partes[1].padStart(2, '0')}/${partes[2]}`;
       return strFecha;
     }
 
-    // Identificación de Turno: hora de inicio < 12 AM/PM = MAÑANA, >= 12 = TARDE
     function obtenerNombreTurno(horarioStr) {
       if (!horarioStr) return { nombre: "MAÑANA", clase: "manana" };
-      
       const horaMatch = horarioStr.match(/(\d{1,2}):\d{2}/);
       if (!horaMatch) return { nombre: "MAÑANA", clase: "manana" };
-
-      const horaInicio = parseInt(horaMatch[1], 10);
-
-      if (horaInicio < 12) {
-        return { nombre: "MAÑANA", clase: "manana" };
-      } else {
-        return { nombre: "TARDE", clase: "tarde" };
-      }
+      return parseInt(horaMatch[1], 10) < 12 ? { nombre: "MAÑANA", clase: "manana" } : { nombre: "TARDE", clase: "tarde" };
     }
 
     function obtenerGrupoOcupacional(especialidad) {
       const esp = (especialidad || "").toUpperCase().trim();
-      
       if (esp.includes("GINEC")) return "MEDICO";
-
       if (esp === "OBSTETRA" || esp === "OBSTETRICIA") return "OBSTETRICIA";
       if (esp === "ODONTOLOGIA" || esp.includes("ODONTO")) return "ODONTOLOGIA";
       if (esp === "NUTRICION" || esp.includes("NUTRI")) return "NUTRICION";
       if (esp === "PSICOLOGIA" || esp.includes("PSICO")) return "PSICOLOGIA";
-      
       return "MEDICO";
     }
 
@@ -335,40 +416,27 @@
     }
 
     function iniciarSesion() {
-      const u = document.getElementById("userInput").value.trim();
-      const p = document.getElementById("passInput").value.trim();
-
+      const u = document.getElementById("userInput").value.trim(), p = document.getElementById("passInput").value.trim();
       if (u === p && DNI_PERMITIDOS.includes(u)) {
         document.getElementById("login-overlay").style.display = "none";
         document.getElementById("login-error").style.display = "none";
         document.getElementById("contenidoPrincipal").style.display = "block";
         cargarDatosApp();
-      } else {
-        document.getElementById("login-error").style.display = "block";
-      }
+      } else { document.getElementById("login-error").style.display = "block"; }
     }
 
     function cerrarSesion() {
       document.getElementById("contenidoPrincipal").style.display = "none";
-      document.getElementById("userInput").value = "";
-      document.getElementById("passInput").value = "";
       document.getElementById("login-overlay").style.display = "flex";
     }
 
     function cargarDatosApp() {
-      const jsonUrl = 'https://gist.githubusercontent.com/jc119580/714e9a742bcb89bd3bb2b7c7e9587564/raw/pacientes_citados.json?v=' + Date.now();
-
-      fetch(jsonUrl, { cache: "no-store" })
-        .then(res => {
-          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-          return res.json();
-        })
+      fetch('https://gist.githubusercontent.com/jc119580/714e9a742bcb89bd3bb2b7c7e9587564/raw/pacientes_citados.json?v=' + Date.now(), { cache: "no-store" })
+        .then(res => res.json())
         .then(data => {
           if (!Array.isArray(data) || data.length === 0) {
-            document.getElementById("listaContenedor").innerHTML = "⚠️ No hay datos cargados. Por favor suba el Excel usando el convertidor.";
-            return;
+            document.getElementById("listaContenedor").innerHTML = "⚠️ No hay datos cargados."; return;
           }
-
           rawDataCitados = data.map(item => ({
             ...item,
             fecha: normalizarFecha(item.fecha),
@@ -381,47 +449,30 @@
             pro: parseInt(item.pro, 10) || 0,
             cit: parseInt(item.cit, 10) || 0
           }));
-
-          if (data[0] && data[0].fecha_corte) {
-            document.getElementById("infoCorte").innerHTML = `⏱️ <b>Fecha y hora de corte:</b> ${escapeHTML(data[0].fecha_corte)}`;
-          }
-
+          if (data[0] && data[0].fecha_corte) document.getElementById("infoCorte").innerHTML = `⏱️ <b>Fecha y hora de corte:</b> ${escapeHTML(data[0].fecha_corte)}`;
           poblarSelectorFechas();
           calcularNoCitadosAcumulados();
           aplicarFiltros();
         })
-        .catch(err => {
-          console.error("Error:", err);
-          document.getElementById("listaContenedor").innerHTML = "⚠️ Error al conectar con los datos. Vuelva a subir el Excel desde el convertidor.";
-        });
+        .catch(err => { document.getElementById("listaContenedor").innerHTML = "⚠️ Error al conectar con los datos."; });
     }
 
     function convertirFechaAKey(strFecha) {
       if (!strFecha) return 0;
       let partes = strFecha.split("/");
-      if (partes.length === 3) {
-        let d = partes[0].padStart(2, '0');
-        let m = partes[1].padStart(2, '0');
-        let a = partes[2];
-        return parseInt(`${a}${m}${d}`, 10);
-      }
+      if (partes.length === 3) return parseInt(`${partes[2]}${partes[1].padStart(2, '0')}${partes[0].padStart(2, '0')}`, 10);
       return 0;
     }
 
     function calcularNoCitadosAcumulados() {
-      const hoy = new Date();
-      const ayer = new Date(hoy);
+      const hoy = new Date(), ayer = new Date(hoy);
       ayer.setDate(hoy.getDate() - 1);
-
       const keyAyer = parseInt(`${ayer.getFullYear()}${String(ayer.getMonth() + 1).padStart(2, '0')}${String(ayer.getDate()).padStart(2, '0')}`, 10);
       const keyInicioMes = parseInt(`${ayer.getFullYear()}${String(ayer.getMonth() + 1).padStart(2, '0')}01`, 10);
-
-      const serviciosAcumulados = {};
-      let totalNoCitadosGenerales = 0;
+      const serviciosAcumulados = {}; let totalNoCitadosGenerales = 0;
 
       rawDataCitados.forEach(item => {
         let keyFechaItem = convertirFechaAKey(item.fecha);
-        
         if (keyFechaItem >= keyInicioMes && keyFechaItem <= keyAyer) {
           let faltan = item.pro - item.cit;
           if (faltan > 0) {
@@ -432,56 +483,27 @@
         }
       });
 
-      const dAyer = String(ayer.getDate()).padStart(2, '0');
-      const mAyer = String(ayer.getMonth() + 1).padStart(2, '0');
-      document.getElementById("rangoFechasNoCitados").innerText = `(01/${mAyer} al ${dAyer}/${mAyer}) — Total: ${totalNoCitadosGenerales} pac.`;
-
-      const cont = document.getElementById("contenedorNoCitados");
-      const llavesServicios = Object.keys(serviciosAcumulados);
-
-      if (llavesServicios.length === 0) {
-        cont.innerHTML = `<span style="font-size:11.5px; color:#2e7d32; font-weight:bold;">🟢 ¡Excelente! No hay pacientes no citados acumulados hasta ayer.</span>`;
-        return;
-      }
+      document.getElementById("rangoFechasNoCitados").innerText = `(01/${String(ayer.getMonth() + 1).padStart(2, '0')} al ${String(ayer.getDate()).padStart(2, '0')}/${String(ayer.getMonth() + 1).padStart(2, '0')}) — Total: ${totalNoCitadosGenerales} pac.`;
+      const cont = document.getElementById("contenedorNoCitados"), llavesServicios = Object.keys(serviciosAcumulados);
+      if (llavesServicios.length === 0) { cont.innerHTML = `<span style="font-size:11.5px; color:#2e7d32; font-weight:bold;">🟢 ¡Excelente! No hay pendientes acumulados.</span>`; return; }
 
       llavesServicios.sort((a, b) => serviciosAcumulados[b] - serviciosAcumulados[a]);
-
       let html = "";
       llavesServicios.forEach(serv => {
-        html += `
-          <div class="servicio-chip">
-            <span title="${escapeHTML(serv)}">${escapeHTML(serv)}</span>
-            <b>${serviciosAcumulados[serv]}</b>
-          </div>
-        `;
+        html += `<div class="servicio-chip"><span title="${escapeHTML(serv)}">${escapeHTML(serv)}</span><b>${serviciosAcumulados[serv]}</b></div>`;
       });
-
       cont.innerHTML = html;
     }
 
-    // Agrupa por Especialidad + Subactividad dentro de cada turno
     function calcularResumenDia(fechaSel, grupoSel) {
-      const itemsManana = {};
-      const itemsTarde = {};
-      let totalManana = 0;
-      let totalTarde = 0;
-
+      const itemsManana = {}, itemsTarde = {}; let totalManana = 0, totalTarde = 0;
       rawDataCitados.forEach(item => {
         if (item.fecha === fechaSel && (grupoSel === "TODOS" || item.grupoOcupacional === grupoSel)) {
           let faltan = item.pro - item.cit;
           if (faltan > 0) {
-            let especialidad = item.especialidad || "MÉDICO GENERAL";
-            let subactividad = item.actividad || "CONSULTA MEDICA";
-            let clave = `${especialidad}___${subactividad}`;
-            let turno = item.turnoObj.nombre;
-
-            if (turno === "MAÑANA") {
-              itemsManana[clave] = (itemsManana[clave] || 0) + faltan;
-              totalManana += faltan;
-            } else {
-              itemsTarde[clave] = (itemsTarde[clave] || 0) + faltan;
-              totalTarde += faltan;
-            }
+            let clave = `${item.especialidad || "MÉDICO GENERAL"}___${item.actividad || "CONSULTA MEDICA"}`;
+            if (item.turnoObj.nombre === "MAÑANA") { itemsManana[clave] = (itemsManana[clave] || 0) + faltan; totalManana += faltan; }
+            else { itemsTarde[clave] = (itemsTarde[clave] || 0) + faltan; totalTarde += faltan; }
           }
         }
       });
@@ -490,48 +512,26 @@
       document.getElementById("totalPendientesManana").innerText = `${totalManana} cupos`;
       document.getElementById("totalPendientesTarde").innerText = `${totalTarde} cupos`;
 
-      // Render Mañana
-      const contManana = document.getElementById("listaManana");
-      const keysManana = Object.keys(itemsManana);
-      if (keysManana.length === 0) {
-        contManana.innerHTML = `<span style="font-size:11.5px; color:#2e7d32; font-weight:bold;">🟢 Sin cupos pendientes</span>`;
-      } else {
+      const contManana = document.getElementById("listaManana"), keysManana = Object.keys(itemsManana);
+      if (keysManana.length === 0) contManana.innerHTML = `<span style="font-size:11.5px; color:#2e7d32; font-weight:bold;">🟢 Sin cupos pendientes</span>`;
+      else {
         keysManana.sort((a, b) => itemsManana[b] - itemsManana[a]);
         let htmlM = "";
         keysManana.forEach(key => {
           let [esp, act] = key.split("___");
-          htmlM += `
-            <div class="chip-turno">
-              <div class="sub-info">
-                <span class="esp-name" title="${escapeHTML(esp)}">${escapeHTML(esp)}</span>
-                <span class="act-name" title="${escapeHTML(act)}">📌 ${escapeHTML(act)}</span>
-              </div>
-              <b>${itemsManana[key]}</b>
-            </div>
-          `;
+          htmlM += `<div class="chip-turno"><div class="sub-info"><span class="esp-name" title="${escapeHTML(esp)}">${escapeHTML(esp)}</span><span class="act-name" title="${escapeHTML(act)}">📌 ${escapeHTML(act)}</span></div><b>${itemsManana[key]}</b></div>`;
         });
         contManana.innerHTML = htmlM;
       }
 
-      // Render Tarde
-      const contTarde = document.getElementById("listaTarde");
-      const keysTarde = Object.keys(itemsTarde);
-      if (keysTarde.length === 0) {
-        contTarde.innerHTML = `<span style="font-size:11.5px; color:#2e7d32; font-weight:bold;">🟢 Sin cupos pendientes</span>`;
-      } else {
+      const contTarde = document.getElementById("listaTarde"), keysTarde = Object.keys(itemsTarde);
+      if (keysTarde.length === 0) contTarde.innerHTML = `<span style="font-size:11.5px; color:#2e7d32; font-weight:bold;">🟢 Sin cupos pendientes</span>`;
+      else {
         keysTarde.sort((a, b) => itemsTarde[b] - itemsTarde[a]);
         let htmlT = "";
         keysTarde.forEach(key => {
           let [esp, act] = key.split("___");
-          htmlT += `
-            <div class="chip-turno">
-              <div class="sub-info">
-                <span class="esp-name" title="${escapeHTML(esp)}">${escapeHTML(esp)}</span>
-                <span class="act-name" title="${escapeHTML(act)}">📌 ${escapeHTML(act)}</span>
-              </div>
-              <b>${itemsTarde[key]}</b>
-            </div>
-          `;
+          htmlT += `<div class="chip-turno"><div class="sub-info"><span class="esp-name" title="${escapeHTML(esp)}">${escapeHTML(esp)}</span><span class="act-name" title="${escapeHTML(act)}">📌 ${escapeHTML(act)}</span></div><b>${itemsTarde[key]}</b></div>`;
         });
         contTarde.innerHTML = htmlT;
       }
@@ -540,45 +540,22 @@
     function poblarSelectorFechas() {
       const setFechas = new Set();
       rawDataCitados.forEach(item => { if (item.fecha && item.fecha !== "S/F") setFechas.add(item.fecha); });
-
-      const sel = document.getElementById("filterFecha");
-      sel.innerHTML = "";
+      const sel = document.getElementById("filterFecha"); sel.innerHTML = "";
       let fechasArr = Array.from(setFechas);
-
-      if (fechasArr.length === 0) {
-        sel.innerHTML = `<option value="S/F">📅 Sin Fecha</option>`;
-        return;
-      }
+      if (fechasArr.length === 0) { sel.innerHTML = `<option value="S/F">📅 Sin Fecha</option>`; return; }
 
       fechasArr.sort((a, b) => convertirFechaAKey(b) - convertirFechaAKey(a));
-
       let optionsBuffer = "";
-      fechasArr.forEach((f) => {
-        optionsBuffer += `<option value="${escapeHTML(f)}">📅 Fecha: ${escapeHTML(f)}</option>`;
-      });
+      fechasArr.forEach(f => { optionsBuffer += `<option value="${escapeHTML(f)}">📅 Fecha: ${escapeHTML(f)}</option>`; });
       sel.innerHTML = optionsBuffer;
 
-      const hoy = new Date();
-      const d = String(hoy.getDate()).padStart(2, '0');
-      const m = String(hoy.getMonth() + 1).padStart(2, '0');
-      const a = hoy.getFullYear();
-      const fechaHoy = `${d}/${m}/${a}`;
-
-      if (fechasArr.includes(fechaHoy)) {
-        sel.value = fechaHoy;
-      } else {
-        const keyHoy = convertirFechaAKey(fechaHoy);
-        const fechaProxima = fechasArr.find(f => convertirFechaAKey(f) >= keyHoy);
-        sel.value = fechaProxima || fechasArr[0];
-      }
+      const hoy = new Date(), fechaHoy = `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
+      if (fechasArr.includes(fechaHoy)) sel.value = fechaHoy;
+      else sel.value = fechasArr.find(f => convertirFechaAKey(f) >= convertirFechaAKey(fechaHoy)) || fechasArr[0];
     }
 
     function aplicarFiltros() {
-      const fechaSel = document.getElementById("filterFecha").value;
-      const grupoSel = document.getElementById("filterGrupo").value;
-      const estadoSel = document.getElementById("filterEstado").value;
-      const busqueda = document.getElementById("filterBuscar").value.toLowerCase().trim();
-
+      const fechaSel = document.getElementById("filterFecha").value, grupoSel = document.getElementById("filterGrupo").value, estadoSel = document.getElementById("filterEstado").value, busqueda = document.getElementById("filterBuscar").value.toLowerCase().trim();
       calcularResumenDia(fechaSel, grupoSel);
 
       let filtrados = rawDataCitados.filter(item => {
@@ -586,62 +563,35 @@
         let matchGrupo = (grupoSel === "TODOS" || item.grupoOcupacional === grupoSel);
         let estadoCalculado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
         let matchEstado = (estadoSel === "TODOS" || estadoSel === estadoCalculado);
-
-        let matchTexto = (item.medico || "").toLowerCase().includes(busqueda) || 
-                         (item.especialidad || "").toLowerCase().includes(busqueda) || 
-                         (item.actividad || "").toLowerCase().includes(busqueda) ||
-                         (item.horario || "").toLowerCase().includes(busqueda) ||
-                         (item.turnoObj.nombre || "").toLowerCase().includes(busqueda);
-
+        let matchTexto = (item.medico || "").toLowerCase().includes(busqueda) || (item.especialidad || "").toLowerCase().includes(busqueda) || (item.actividad || "").toLowerCase().includes(busqueda) || (item.horario || "").toLowerCase().includes(busqueda) || (item.turnoObj.nombre || "").toLowerCase().includes(busqueda);
         return matchFecha && matchGrupo && matchEstado && matchTexto;
       });
 
-      filtrados.sort((a, b) => {
-        let faltanA = Math.max(0, a.pro - a.cit);
-        let faltanB = Math.max(0, b.pro - b.cit);
-        return faltanB - faltanA;
-      });
-
+      filtrados.sort((a, b) => Math.max(0, b.pro - b.cit) - Math.max(0, a.pro - a.cit));
       renderizar(filtrados);
     }
 
     function renderizar(lista) {
       let sumPro = 0, sumCit = 0, sumFaltan = 0;
-
-      const fechaSel = document.getElementById("filterFecha").value;
-      const grupoSel = document.getElementById("filterGrupo").value;
-
+      const fechaSel = document.getElementById("filterFecha").value, grupoSel = document.getElementById("filterGrupo").value;
       const listaMetricas = rawDataCitados.filter(i => (i.fecha === fechaSel) && (grupoSel === "TODOS" || i.grupoOcupacional === grupoSel));
 
       listaMetricas.forEach(item => {
-        sumPro += item.pro;
-        sumCit += item.cit;
-        let faltan = item.pro - item.cit;
-        if (faltan > 0) sumFaltan += faltan;
+        sumPro += item.pro; sumCit += item.cit;
+        let faltan = item.pro - item.cit; if (faltan > 0) sumFaltan += faltan;
       });
-
-      let pctGlobal = sumPro > 0 ? ((sumCit / sumPro) * 100).toFixed(1) : "0.0";
 
       document.getElementById("m-pro").innerText = sumPro;
       document.getElementById("m-cit").innerText = sumCit;
       document.getElementById("m-faltan").innerText = sumFaltan;
-      document.getElementById("m-pct").innerText = pctGlobal + "%";
+      document.getElementById("m-pct").innerText = (sumPro > 0 ? ((sumCit / sumPro) * 100).toFixed(1) : "0.0") + "%";
 
       const cont = document.getElementById("listaContenedor");
-
-      if (lista.length === 0) {
-        cont.innerHTML = `<div style="text-align:center; padding:35px 15px; background:white; border-radius:10px; color:#555; font-weight:bold; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-            🎉 No hay cupos con los filtros seleccionados.
-          </div>`;
-        return;
-      }
+      if (lista.length === 0) { cont.innerHTML = `<div style="text-align:center; padding:35px; background:white; border-radius:10px; font-weight:bold;">🎉 No hay cupos con los filtros seleccionados.</div>`; return; }
 
       let htmlBuffer = "";
       lista.forEach(item => {
-        let faltan = item.pro - item.cit;
-        let pct = item.pro > 0 ? Math.min(((item.cit / item.pro) * 100), 200).toFixed(1) : "0.0";
-        let estado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
-
+        let faltan = item.pro - item.cit, pct = item.pro > 0 ? Math.min(((item.cit / item.pro) * 100), 200).toFixed(1) : "0.0", estado = (item.cit >= item.pro) ? "COMPLETO" : "INCOMPLETO";
         htmlBuffer += `
           <div class="item-card ${estado}">
             <div class="item-header">
@@ -653,7 +603,6 @@
               </div>
               <span class="badge-estado ${estado}">${estado === 'INCOMPLETO' ? '🟡 FALTAN CITAR' : '🟢 100% LLENO'}</span>
             </div>
-
             <div class="item-info">
               <div>📌 <b>Subactividad:</b> ${escapeHTML(item.actividad)}</div>
               <div class="info-grid">
@@ -661,18 +610,10 @@
                 <div>🚨 <b>Cupos Faltantes:</b> <b style="color:${faltan > 0 ? '#d32f2f' : '#2e7d32'}; font-size:13px;">${faltan <= 0 ? 'COMPLETO' : faltan}</b></div>
               </div>
             </div>
-
-            <div class="progress-bar-bg">
-              <div class="progress-bar-fill ${estado === 'COMPLETO' ? 'completo' : ''}" style="width: ${Math.min(pct, 100)}%"></div>
-            </div>
-            <div class="progress-text">
-              <span>Citados: ${item.cit} de ${item.pro}</span>
-              <span>${pct}% Ocupado</span>
-            </div>
-          </div>
-        `;
+            <div class="progress-bar-bg"><div class="progress-bar-fill ${estado === 'COMPLETO' ? 'completo' : ''}" style="width: ${Math.min(pct, 100)}%"></div></div>
+            <div class="progress-text"><span>Citados: ${item.cit} de ${item.pro}</span><span>${pct}% Ocupado</span></div>
+          </div>`;
       });
-
       cont.innerHTML = htmlBuffer;
     }
   </script>
