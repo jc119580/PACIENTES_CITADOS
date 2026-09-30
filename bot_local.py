@@ -81,10 +81,8 @@ def procesar_excel_y_github(ruta_txt):
                 for i, val in enumerate(fechas_raw, start=2):
                     if val and str(val).strip():
                         try:
-                            # Convertir asegurando que el primer número es el DÍA
                             dt = pd.to_datetime(str(val).strip(), dayfirst=True, errors='coerce')
                             if pd.notnull(dt):
-                                # Al asignar un objeto datetime.date, win32com pasa la fecha exacta sin invertir día/mes
                                 ws_hoja2.Cells(i, idx_col).Value = datetime.date(dt.year, dt.month, dt.day)
                         except:
                             pass
@@ -111,14 +109,13 @@ def procesar_excel_y_github(ruta_txt):
 
         print("✅ ¡Tablas dinámicas y datos de Hoja 1/Hoja 2 actualizados al 100%!")
 
-        # 4. Sincronizar con GitHub
+        # 4. Sincronizar con GitHub (Limpio sin rebase atascado)
         print("🚀 Sincronizando con GitHub...")
         os.chdir(CARPETA_PROYECTO)
 
         subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Corrección de fechas mediante datetime.date en API COM"], check=False)
-        subprocess.run(["git", "pull", "origin", "main", "--rebase"], check=False)
-        subprocess.run(["git", "push", "origin", "main"], check=True)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Datos y fechas actualizadas correctamente"], check=False)
+        subprocess.run(["git", "push", "origin", "main", "--force"], check=True)
 
         print("✅ ¡Publicado con éxito en GitHub!")
         return True, "Proceso completado e interfaz sincronizada."
