@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Convertidor de Pacientes Citados - Hospital Albrecht</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
+    .card { background: white; max-width: 500px; margin: auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .drop-zone { border: 2px dashed #1a237e; border-radius: 8px; padding: 25px; cursor: pointer; background: #e8eaf6; color: #1a237e; font-weight: bold; margin: 15px 0; }
+    input[type="text"], input[type="password"] { width: 100%; padding: 10px; margin: 6px 0 12px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    #status { margin-top: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>📤 Convertidor de Pacientes Citados</h2>
+    <p style="font-size: 12px; color: #555;">Suba la tabla dinámica exportada de Excel para actualizar el aplicativo.</p>
+    
+    <label style="font-size:11px; font-weight:bold; float:left;">GitHub Token:</label>
+    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx">
+    
+    <label style="font-size:11px; font-weight:bold; float:left;">Gist ID:</label>
+    <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
+
+    <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+      📁 Arrastre aquí su archivo Excel del día o haga clic
+      <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <script>
+    document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
+
+    function procesarExcel(file) {
+      if(!file) return;
+      const reader = new FileReader();
+      
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, {type: 'array'});
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+
+          let resultado = [];
+          let currFecha = "24/08/2026";
+          let currMedico = "MÉDICO REGISTRADO";
+          let currHorario = "S/H";
+          let currEsp = "CONSULTA EXTERNA";
+
+          const ESPS = [
+            "MEDICINA", "CIRUGIA", "PEDIATRIA", "OFTALMOLOGIA", "GINECOLOGIA", 
+            "DERMATOLOGIA", "GERIATRIA", "OTORRINOLARINGOLOGIA", "UROLOGIA", 
+            "ANESTESIA", "NEUROLOGIA", "NEUMOLOGIA", "GASTROENTEROLOGIA", 
+            "ORTOPEDIA", "MEDICO DE CONTROL", "OBSTETRICIA", "REHABILITAC",
+            "TRAUMATOLOGIA"
+          ];
+
+          for (let i = 0; i < rows.length; i++) {
+            let row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            let col0 = row[0] ? String(row[0]).trim() : "";
+            let val1 = row[1];
+            let val2 = row[2];
+
+            if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila") || col0.toUpperCase().includes("CODACTI")) continue;
+
+            let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
+            if (matchFecha) {
+              currFecha = matchFecha[0];
+              continue;
+            }
+
+            if (col0.match(/\d{2}:\d{2}/)) {
+              currHorario = col0;
+              continue;
+            }
+
+            let num1 = parseInt(val1);
+            let num2 = parseInt(val2);
+            let tieneDatos = (!isNaN(num1) && !isNaN(num2));
+
+            if (tieneDatos) {
+              if (num1 > 0 || num2 > 0) {
+                resultado.push({
+                  fecha: currFecha,
+                  medico: currMedico,
+                  horario: currHorario,
+                  especialidad: currEsp,
+                  actividad: col0,
+                  pro: num1,
+                  cit: num2
+                });
+              }
+            } else {
+              let esEspecialidad = ESPS.some(esp => col0.toUpperCase().includes(esp));
+              if (esEspecialidad) {
+                currEsp = col0;
+              } else {
+                currMedico = col0;
+              }
+            }
+          }
+
+          if (resultado.length === 0) {
+            alert("No se encontraron registros de cupos en el Excel.");
+            return;
+          }
+
+          subirAGist(resultado);
+        } catch(err) {
+          alert("Error al leer el archivo Excel: " + err.message);
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    }
+
+    function subirAGist(jsonArray) {
+      const token = document.getElementById('ghToken').value.trim();
+      const gistId = document.getElementById('gistId').value.trim();
+      const status = document.getElementById('status');
+
+      if(!token || !gistId) {
+        alert("Por favor ingrese su Token de GitHub.");
+        return;
+      }
+
+      localStorage.setItem('gh_token', token);
+      status.style.color = "blue";
+      status.innerText = "⏳ Guardando datos en la nube...";
+
+      fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `token ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          files: {
+            "pacientes_citados.json": {
+              content: JSON.stringify(jsonArray, null, 2)
+            }
+          }
+        })
+      })
+      .then(res => {
+        if(res.ok) {
+          status.style.color = "green";
+          status.innerText = "✅ ¡Datos cargados con éxito! Abra el aplicativo web.";
+        } else {
+          throw new Error("Error en el servidor de GitHub");
+        }
+      })
+      .catch(err => {
+        status.style.color = "red";
+        status.innerText = "❌ Error al actualizar: " + err.message;
+      });
+    }
+  </script>
+</body>
+</html>
