@@ -16,32 +16,36 @@ CARPETA_PROYECTO = r"C:\Users\Usuario\Documents\JC\PACIENTES CITADOS"
 ARCHIVO_EXCEL = os.path.join(CARPETA_PROYECTO, "CITADOS DE SETIEMBRE.xlsx")
 
 def procesar_excel_y_github(ruta_txt):
-    """Estructura la Hoja 2, corrige estrictamente la fecha DD/MM/YYYY, actualiza el rango y refresca tablas dinámicas"""
+    """Estructura la Hoja 2 leyendo HrasEfectivas y protegiendo la columna PERIODO/FECHA para evitar inversión MM/DD"""
     try:
         pythoncom.CoInitialize()
 
         print(f"\n📄 Convertidor activado para: {ruta_txt}")
         print("📊 Desglosando datos e inyectando en la Hoja 2...")
 
-        # 1. Leer el TXT separando por '|'
+        # 1. Leer el TXT separando por '|' sin alterar el texto original
         df_txt = pd.read_csv(ruta_txt, sep='|', encoding='latin1', on_bad_lines='skip', dtype=str)
 
         # Normalizar nombres de columnas
         df_txt.columns = df_txt.columns.str.strip()
 
-        # Identificar la columna de fecha
+        # Identificar la columna de fecha (que en HrasEfectivas se llama PERIODO)
         col_fecha = None
-        for col in ['FECHA', 'FECHA_CITA', 'FECHACITA', 'FEC_CITA']:
+        for col in ['PERIODO', 'FECHA', 'FECHA_CITA', 'FECHACITA', 'FEC_CITA']:
             if col in df_txt.columns:
                 col_fecha = col
                 break
 
         if col_fecha:
-            # Parsear la fecha del TXT forzando lectura DD/MM/YYYY
-            fechas_dt = pd.to_datetime(df_txt[col_fecha], dayfirst=True, errors='coerce')
-            df_txt[col_fecha] = fechas_dt.dt.strftime('%d/%m/%Y')
+            # Parsear la fecha forzando la lectura de DÍA primero
+            fechas_parsed = pd.to_datetime(df_txt[col_fecha], dayfirst=True, errors='coerce')
+            if fechas_parsed.isnull().any():
+                fechas_parsed = pd.to_datetime(df_txt[col_fecha], format='mixed', dayfirst=True, errors='coerce')
+            
+            # Formatear la fecha estricta como texto DD/MM/YYYY
+            df_txt[col_fecha] = fechas_parsed.dt.strftime('%d/%m/%Y').fillna('')
 
-        # 2. Abrir Excel mediante win32com (Dispatch estándar para evitar errores de gen_py)
+        # 2. Abrir Excel mediante win32com
         excel = win32.Dispatch('Excel.Application')
         excel.Visible = False
         excel.DisplayAlerts = False
@@ -63,21 +67,18 @@ def procesar_excel_y_github(ruta_txt):
         for col_num, col_name in enumerate(df_txt.columns, 1):
             ws_hoja2.Cells(1, col_num).Value = str(col_name)
 
+        # FORZAR FORMATO DE TEXTO PURO ("@") EN LA COLUMNA DE FECHA/PERIODO ANTES DE PEGAR
+        if col_fecha:
+            idx_col = df_txt.columns.get_loc(col_fecha) + 1
+            ws_hoja2.Columns(idx_col).NumberFormat = "@"
+
         # Escribir datos
         datos = df_txt.fillna('').values.tolist()
         if datos:
             filas = len(datos)
             columnas = len(datos[0])
             rango_destino = ws_hoja2.Range(ws_hoja2.Cells(2, 1), ws_hoja2.Cells(filas + 1, columnas))
-            
-            # Asignar valores
             rango_destino.Value = datos
-
-            # Forzar formato de fecha si existe la columna
-            if col_fecha:
-                idx_col = df_txt.columns.get_loc(col_fecha) + 1
-                col_rango = ws_hoja2.Range(ws_hoja2.Cells(2, idx_col), ws_hoja2.Cells(filas + 1, idx_col))
-                col_rango.NumberFormat = "dd/mm/yyyy"
 
         print("🔄 Redefiniendo origen de datos y actualizando Tablas Dinámicas en Hoja 1...")
 
@@ -88,7 +89,6 @@ def procesar_excel_y_github(ruta_txt):
         ult_col = ws_hoja2.UsedRange.Columns.Count
         nuevo_rango = f"'{ws_hoja2.Name}'!R1C1:R{ult_fila}C{ult_col}"
 
-        # Recorrer y actualizar cada tabla dinámica en Hoja 1 (xlDatabase = 1)
         for pt in ws_hoja1.PivotTables():
             try:
                 pt.ChangePivotCache(wb.PivotCaches().Create(SourceType=1, SourceData=nuevo_rango))
@@ -107,7 +107,7 @@ def procesar_excel_y_github(ruta_txt):
         os.chdir(CARPETA_PROYECTO)
 
         subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Datos actualizados y limpieza de bot"], check=False)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Columna PERIODO de HrasEfectivas fijada como texto en Excel"], check=False)
         subprocess.run(["git", "pull", "origin", "main", "--rebase"], check=False)
         subprocess.run(["git", "push", "origin", "main"], check=True)
 
