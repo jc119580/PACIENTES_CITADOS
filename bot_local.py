@@ -16,34 +16,30 @@ CARPETA_PROYECTO = r"C:\Users\Usuario\Documents\JC\PACIENTES CITADOS"
 ARCHIVO_EXCEL = os.path.join(CARPETA_PROYECTO, "CITADOS DE SETIEMBRE.xlsx")
 
 def procesar_excel_y_github(ruta_txt):
-    """Estructura la Hoja 2 leyendo HrasEfectivas y protegiendo la columna PERIODO/FECHA para evitar inversión MM/DD"""
+    """Estructura la Hoja 2 leyendo HrasEfectivas y escribiendo las fechas celda por celda para evitar reconversión a formato EE.UU."""
     try:
         pythoncom.CoInitialize()
 
         print(f"\n📄 Convertidor activado para: {ruta_txt}")
         print("📊 Desglosando datos e inyectando en la Hoja 2...")
 
-        # 1. Leer el TXT separando por '|' sin alterar el texto original
+        # 1. Leer el TXT separando por '|'
         df_txt = pd.read_csv(ruta_txt, sep='|', encoding='latin1', on_bad_lines='skip', dtype=str)
-
-        # Normalizar nombres de columnas
         df_txt.columns = df_txt.columns.str.strip()
 
-        # Identificar la columna de fecha (que en HrasEfectivas se llama PERIODO)
+        # Identificar la columna de fecha (PERIODO en HrasEfectivas)
         col_fecha = None
         for col in ['PERIODO', 'FECHA', 'FECHA_CITA', 'FECHACITA', 'FEC_CITA']:
             if col in df_txt.columns:
                 col_fecha = col
                 break
 
+        # Convertir la columna a fechas corregidas estricto DD/MM/YYYY
         if col_fecha:
-            # Parsear la fecha forzando la lectura de DÍA primero
-            fechas_parsed = pd.to_datetime(df_txt[col_fecha], dayfirst=True, errors='coerce')
-            if fechas_parsed.isnull().any():
-                fechas_parsed = pd.to_datetime(df_txt[col_fecha], format='mixed', dayfirst=True, errors='coerce')
-            
-            # Formatear la fecha estricta como texto DD/MM/YYYY
-            df_txt[col_fecha] = fechas_parsed.dt.strftime('%d/%m/%Y').fillna('')
+            fechas_dt = pd.to_datetime(df_txt[col_fecha], dayfirst=True, errors='coerce')
+            if fechas_dt.isnull().any():
+                fechas_dt = pd.to_datetime(df_txt[col_fecha], format='mixed', dayfirst=True, errors='coerce')
+            df_txt[col_fecha] = fechas_dt.dt.strftime('%d/%m/%Y').fillna('')
 
         # 2. Abrir Excel mediante win32com
         excel = win32.Dispatch('Excel.Application')
@@ -52,7 +48,6 @@ def procesar_excel_y_github(ruta_txt):
 
         wb = excel.Workbooks.Open(ARCHIVO_EXCEL)
         
-        # Buscar Hoja 2
         try:
             ws_hoja2 = wb.Worksheets("Hoja2")
         except:
@@ -67,18 +62,25 @@ def procesar_excel_y_github(ruta_txt):
         for col_num, col_name in enumerate(df_txt.columns, 1):
             ws_hoja2.Cells(1, col_num).Value = str(col_name)
 
-        # FORZAR FORMATO DE TEXTO PURO ("@") EN LA COLUMNA DE FECHA/PERIODO ANTES DE PEGAR
-        if col_fecha:
-            idx_col = df_txt.columns.get_loc(col_fecha) + 1
-            ws_hoja2.Columns(idx_col).NumberFormat = "@"
-
-        # Escribir datos
+        # Inyectar datos
         datos = df_txt.fillna('').values.tolist()
         if datos:
             filas = len(datos)
             columnas = len(datos[0])
+            
+            # Pegar el bloque completo
             rango_destino = ws_hoja2.Range(ws_hoja2.Cells(2, 1), ws_hoja2.Cells(filas + 1, columnas))
             rango_destino.Value = datos
+
+            # CORRECCIÓN CLAVE: Sobreescribir la columna de fechas celda por celda como Texto Forzado con (')
+            if col_fecha:
+                idx_col = df_txt.columns.get_loc(col_fecha) + 1
+                fechas_lista = df_txt[col_fecha].tolist()
+                
+                # Asignar explícitamente cada valor con apóstrofe directo en Excel
+                for i, f_val in enumerate(fechas_lista, start=2):
+                    if f_val:
+                        ws_hoja2.Cells(i, idx_col).Value = f"'{f_val}"
 
         print("🔄 Redefiniendo origen de datos y actualizando Tablas Dinámicas en Hoja 1...")
 
@@ -107,7 +109,7 @@ def procesar_excel_y_github(ruta_txt):
         os.chdir(CARPETA_PROYECTO)
 
         subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Columna PERIODO de HrasEfectivas fijada como texto en Excel"], check=False)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Sobreescritura estricta celda a celda de fechas en Hoja 2"], check=False)
         subprocess.run(["git", "pull", "origin", "main", "--rebase"], check=False)
         subprocess.run(["git", "push", "origin", "main"], check=True)
 
@@ -128,7 +130,6 @@ def sincronizar():
     print("\n--------------------------------------------------")
     print("🔄 Petición de sincronización recibida...")
 
-    # Buscar el archivo TXT más reciente en Downloads
     patron = os.path.join(CARPETA_DESCARGAS, "*.txt")
     archivos_txt = glob.glob(patron)
 
