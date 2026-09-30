@@ -1,0 +1,1 @@
+CreateObject("Wscript.Shell").Run """C:\Users\Usuario\Documents\JC\PACIENTES CITADOS\iniciar_bot.bat""", 0, False
