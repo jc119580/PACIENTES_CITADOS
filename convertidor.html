@@ -24,7 +24,7 @@
     <input type="text" id="gistId" value="714e9a742bcb89bd3bb2b7c7e9587564">
 
     <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-      📁 Arrastre aquí su archivo Excel del día o haga clic
+      📁 Arrastre aquí su archivo Excel diario/mensual o haga clic
       <input type="file" id="fileInput" accept=".xlsx, .xls" style="display:none;" onchange="procesarExcel(this.files[0])">
     </div>
 
@@ -34,6 +34,56 @@
   <script>
     document.getElementById('ghToken').value = localStorage.getItem('gh_token') || '';
 
+    function excelSerialAFecha(serial) {
+      const n = parseFloat(serial);
+      if (isNaN(n) || n < 10000) return null;
+      const utcDays = Math.floor(n - 25569);
+      const utcValue = utcDays * 86400;
+      const dateInfo = new Date(utcValue * 1000);
+      
+      const d = String(dateInfo.getUTCDate()).padStart(2, '0');
+      const m = String(dateInfo.getUTCMonth() + 1).padStart(2, '0');
+      const a = dateInfo.getUTCFullYear();
+      return `${d}/${m}/${a}`;
+    }
+
+    function parseFechaUniversal(val) {
+      if (!val) return null;
+      let str = String(val).trim();
+
+      if (!isNaN(str) && Number(str) > 10000) {
+        return excelSerialAFecha(str);
+      }
+
+      let mIso = str.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (mIso) {
+        let d = mIso[3].padStart(2, '0');
+        let m = mIso[2].padStart(2, '0');
+        let a = mIso[1];
+        return `${d}/${m}/${a}`;
+      }
+
+      let mNorm = str.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+      if (mNorm) {
+        let p1 = parseInt(mNorm[1], 10);
+        let p2 = parseInt(mNorm[2], 10);
+        let a = mNorm[3];
+        if (a.length === 2) a = "20" + a;
+
+        // Inversión cuando viene en formato Mes/Día/Año
+        if (p1 <= 12 && p2 <= 31) {
+          return `${String(p2).padStart(2, '0')}/${String(p1).padStart(2, '0')}/${a}`;
+        }
+        return `${String(p1).padStart(2, '0')}/${String(p2).padStart(2, '0')}/${a}`;
+      }
+
+      return null;
+    }
+
+    function esHorario(cadena) {
+      return /\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}/.test(String(cadena));
+    }
+
     function procesarExcel(file) {
       if(!file) return;
       const reader = new FileReader();
@@ -41,79 +91,82 @@
       reader.onload = function(e) {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, {type: 'array'});
+          const workbook = XLSX.read(data, { type: 'array', cellDates: false, raw: true });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
+
+          // Capturamos la fecha y hora exacta del momento en que se procesa el archivo
+          const ahora = new Date();
+          const d = String(ahora.getDate()).padStart(2, '0');
+          const m = String(ahora.getMonth() + 1).padStart(2, '0');
+          const a = ahora.getFullYear();
+          const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+          const horaCorteCapturada = `${d}/${m}/${a} — ${horaStr}`;
 
           let resultado = [];
-          let currFecha = "24/08/2026";
-          let currMedico = "MÉDICO REGISTRADO";
-          let currHorario = "S/H";
-          let currEsp = "CONSULTA EXTERNA";
+          let currFecha = "";
+          let currMedico = "";
+          let i = 0;
+          const n = rows.length;
 
-          const ESPS = [
-            "MEDICINA", "CIRUGIA", "PEDIATRIA", "OFTALMOLOGIA", "GINECOLOGIA", 
-            "DERMATOLOGIA", "GERIATRIA", "OTORRINOLARINGOLOGIA", "UROLOGIA", 
-            "ANESTESIA", "NEUROLOGIA", "NEUMOLOGIA", "GASTROENTEROLOGIA", 
-            "ORTOPEDIA", "MEDICO DE CONTROL", "OBSTETRICIA", "REHABILITAC",
-            "TRAUMATOLOGIA"
-          ];
-
-          for (let i = 0; i < rows.length; i++) {
+          while (i < n) {
             let row = rows[i];
-            if (!row || row.length === 0) continue;
+            if (!row || row.length === 0) { i++; continue; }
 
             let col0 = row[0] ? String(row[0]).trim() : "";
-            let val1 = row[1];
-            let val2 = row[2];
+            let col0Upper = col0.toUpperCase();
 
-            if (!col0 || col0.includes("Total general") || col0.includes("Etiquetas de fila") || col0.toUpperCase().includes("CODACTI")) continue;
-
-            let matchFecha = col0.match(/\d{1,2}\/\d{1,2}\/\d{4}/);
-            if (matchFecha) {
-              currFecha = matchFecha[0];
+            if (!col0 || col0Upper.includes("TOTAL GENERAL") || col0Upper.includes("ETIQUETAS DE FILA") || col0Upper.includes("CODACTI")) {
+              i++;
               continue;
             }
 
-            if (col0.match(/\d{2}:\d{2}/)) {
-              currHorario = col0;
+            let fechaDetectada = parseFechaUniversal(col0);
+            if (fechaDetectada) {
+              currFecha = fechaDetectada;
+              currMedico = "";
+              i++;
               continue;
             }
 
-            let num1 = parseInt(val1);
-            let num2 = parseInt(val2);
-            let tieneDatos = (!isNaN(num1) && !isNaN(num2));
+            if (esHorario(col0)) {
+              let hor = col0;
+              let esp = (i + 1 < n && rows[i + 1] && rows[i + 1][0]) ? String(rows[i + 1][0]).trim() : "CONSULTA EXTERNA";
+              let act = (i + 2 < n && rows[i + 2] && rows[i + 2][0]) ? String(rows[i + 2][0]).trim() : "CONSULTA MEDICA";
 
-            if (tieneDatos) {
-              if (num1 > 0 || num2 > 0) {
+              let rowAct = rows[i + 2] || [];
+              let pro = parseInt(rowAct[1], 10) || 0;
+              let cit = parseInt(rowAct[2], 10) || 0;
+
+              if ((pro > 0 || cit > 0) && currFecha) {
                 resultado.push({
                   fecha: currFecha,
-                  medico: currMedico,
-                  horario: currHorario,
-                  especialidad: currEsp,
-                  actividad: col0,
-                  pro: num1,
-                  cit: num2
+                  medico: currMedico || "MÉDICO GENERAL",
+                  especialidad: esp,
+                  actividad: act,
+                  horario: hor,
+                  pro: pro,
+                  cit: cit,
+                  fecha_corte: horaCorteCapturada
                 });
               }
+
+              i += 3;
+              continue;
             } else {
-              let esEspecialidad = ESPS.some(esp => col0.toUpperCase().includes(esp));
-              if (esEspecialidad) {
-                currEsp = col0;
-              } else {
-                currMedico = col0;
-              }
+              currMedico = col0;
+              i++;
             }
           }
 
           if (resultado.length === 0) {
-            alert("No se encontraron registros de cupos en el Excel.");
+            alert("No se encontraron registros válidos en el archivo Excel.");
             return;
           }
 
           subirAGist(resultado);
         } catch(err) {
-          alert("Error al leer el archivo Excel: " + err.message);
+          alert("Error al procesar el archivo Excel: " + err.message);
         }
       };
 
@@ -131,13 +184,14 @@
       }
 
       localStorage.setItem('gh_token', token);
-      status.style.color = "blue";
-      status.innerText = "⏳ Guardando datos en la nube...";
+      status.style.color = "#1a237e";
+      status.innerText = `⏳ Subiendo ${jsonArray.length} registros a GitHub...`;
 
       fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `token ${token}`,
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -151,13 +205,13 @@
       .then(res => {
         if(res.ok) {
           status.style.color = "green";
-          status.innerText = "✅ ¡Datos cargados con éxito! Abra el aplicativo web.";
+          status.innerText = `✅ ¡Éxito! Se actualizaron ${jsonArray.length} registros de cupos correctamente en GitHub Gist.`;
         } else {
-          throw new Error("Error en el servidor de GitHub");
+          throw new Error(`Respuesta del servidor: HTTP ${res.status}`);
         }
       })
       .catch(err => {
-        status.style.color = "red";
+        status.style.color = "#d32f2f";
         status.innerText = "❌ Error al actualizar: " + err.message;
       });
     }
