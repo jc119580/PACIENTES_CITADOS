@@ -17,7 +17,10 @@ CARPETA_PROYECTO = r"C:\Users\Usuario\Documents\JC\PACIENTES CITADOS"
 ARCHIVO_EXCEL = os.path.join(CARPETA_PROYECTO, "CITADOS DE SETIEMBRE.xlsx")
 
 def procesar_excel_y_github(ruta_txt):
-    """Procesa el TXT de HrasEfectivas inyectando fechas corregidas nativas en Hoja 2 para evitar inversión MM/DD por COM"""
+    """
+    Lee el reporte de HrasEfectivas e inyecta las fechas como objetos datetime.date nativos
+    para evitar que la API COM de Excel aplique la configuración regional de EE. UU. (MM/DD/YYYY).
+    """
     try:
         pythoncom.CoInitialize()
 
@@ -28,7 +31,7 @@ def procesar_excel_y_github(ruta_txt):
         df_txt = pd.read_csv(ruta_txt, sep='|', encoding='latin1', on_bad_lines='skip', dtype=str)
         df_txt.columns = df_txt.columns.str.strip()
 
-        # Identificar la columna de fecha (PERIODO en HrasEfectivas)
+        # Identificar la columna de fecha (PERIODO en HrasEfectivas o FECHA)
         col_fecha = None
         for col in ['PERIODO', 'FECHA', 'FECHA_CITA', 'FECHACITA', 'FEC_CITA']:
             if col in df_txt.columns:
@@ -56,7 +59,6 @@ def procesar_excel_y_github(ruta_txt):
         for col_num, col_name in enumerate(df_txt.columns, 1):
             ws_hoja2.Cells(1, col_num).Value = str(col_name)
 
-        # Preparar los datos
         datos = df_txt.fillna('').values.tolist()
         
         if datos:
@@ -64,30 +66,32 @@ def procesar_excel_y_github(ruta_txt):
             columnas = len(datos[0])
             rango_destino = ws_hoja2.Range(ws_hoja2.Cells(2, 1), ws_hoja2.Cells(filas + 1, columnas))
             
-            # Asignar la matriz completa
+            # Pegar matriz completa
             rango_destino.Value = datos
 
-            # CORRECCIÓN DE LA API COM: Reescribir explícitamente la columna de fecha
+            # SOLUCIÓN DE FECHA: Reescribir explícitamente como objeto datetime.date
             if col_fecha:
                 idx_col = df_txt.columns.get_loc(col_fecha) + 1
                 col_rango = ws_hoja2.Range(ws_hoja2.Cells(2, idx_col), ws_hoja2.Cells(filas + 1, idx_col))
                 
-                # Asignar formato explícito DD/MM/YYYY a toda la columna en Excel
+                # Asignar formato visual DD/MM/YYYY a toda la columna
                 col_rango.NumberFormat = "dd/mm/yyyy"
 
-                # Parsear las fechas considerando DÍA primero (dayfirst=True)
                 fechas_raw = df_txt[col_fecha].tolist()
                 
                 for i, val in enumerate(fechas_raw, start=2):
                     if val and str(val).strip():
+                        val_str = str(val).strip()
                         try:
-                            dt = pd.to_datetime(str(val).strip(), dayfirst=True, errors='coerce')
+                            # Parsear asegurando lectura DD/MM/YYYY
+                            dt = pd.to_datetime(val_str, dayfirst=True, errors='coerce')
                             if pd.notnull(dt):
+                                # Inyectar fecha desglosada nativa
                                 ws_hoja2.Cells(i, idx_col).Value = datetime.date(dt.year, dt.month, dt.day)
                         except:
                             pass
 
-        print("🔄 Redefiniendo origen de datos y actualizando Tablas Dinámicas en Hoja 1...")
+        print("🔄 Redefiniendo origen de datos y actualizando Tablas Dinámicas...")
 
         # 3. Actualizar Tablas Dinámicas en Hoja 1
         ws_hoja1 = wb.Worksheets("Hoja1")
@@ -109,16 +113,16 @@ def procesar_excel_y_github(ruta_txt):
 
         print("✅ ¡Tablas dinámicas y datos de Hoja 1/Hoja 2 actualizados al 100%!")
 
-        # 4. Sincronizar con GitHub (Limpio sin rebase atascado)
+        # 4. Sincronizar con GitHub
         print("🚀 Sincronizando con GitHub...")
         os.chdir(CARPETA_PROYECTO)
 
         subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Datos y fechas actualizadas correctamente"], check=False)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Fechas nativas datetime.date corregidas en Excel"], check=False)
         subprocess.run(["git", "push", "origin", "main", "--force"], check=True)
 
         print("✅ ¡Publicado con éxito en GitHub!")
-        return True, "Proceso completado e interfaz sincronizada."
+        return True, "Sincronizado correctamente."
 
     except Exception as e:
         print(f"❌ Error durante el procesamiento: {e}")
@@ -138,10 +142,9 @@ def sincronizar():
     archivos_txt = glob.glob(patron)
 
     if not archivos_txt:
-        return jsonify({"error": "No se encontraron archivos .txt en la carpeta Downloads"}), 400
+        return jsonify({"error": "No se encontraron archivos .txt en Downloads"}), 400
 
     archivo_mas_reciente = max(archivos_txt, key=os.path.getmtime)
-
     exito, mensaje = procesar_excel_y_github(archivo_mas_reciente)
 
     if exito:
