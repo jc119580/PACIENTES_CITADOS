@@ -16,7 +16,7 @@ CARPETA_PROYECTO = r"C:\Users\Usuario\Documents\JC\PACIENTES CITADOS"
 ARCHIVO_EXCEL = os.path.join(CARPETA_PROYECTO, "CITADOS DE SETIEMBRE.xlsx")
 
 def procesar_excel_y_github(ruta_txt):
-    """Estructura la Hoja 2, corrige el formato de fecha MM/DD a DD/MM, actualiza el rango y refresca tablas dinámicas"""
+    """Estructura la Hoja 2, corrige estrictamente la fecha DD/MM/YYYY, actualiza el rango y refresca tablas dinámicas"""
     try:
         pythoncom.CoInitialize()
 
@@ -26,10 +26,10 @@ def procesar_excel_y_github(ruta_txt):
         # 1. Leer el TXT separando por '|'
         df_txt = pd.read_csv(ruta_txt, sep='|', encoding='latin1', on_bad_lines='skip', dtype=str)
 
-        # Normalizar nombres de columnas eliminando espacios extras
+        # Normalizar nombres de columnas
         df_txt.columns = df_txt.columns.str.strip()
 
-        # Corregir y formatear columna de fecha (Invertir MM/DD/YYYY invertido a DD/MM/YYYY)
+        # Identificar la columna de fecha
         col_fecha = None
         for col in ['FECHA', 'FECHA_CITA', 'FECHACITA', 'FEC_CITA']:
             if col in df_txt.columns:
@@ -37,13 +37,10 @@ def procesar_excel_y_github(ruta_txt):
                 break
 
         if col_fecha:
-            # Convertir asegurando que interprete DÍA primero (dayfirst=True)
-            fechas_convertidas = pd.to_datetime(df_txt[col_fecha], dayfirst=True, errors='coerce')
-            if fechas_convertidas.isnull().any():
-                fechas_convertidas = pd.to_datetime(df_txt[col_fecha], format='mixed', dayfirst=True, errors='coerce')
-            
-            # Formatear estrictamente a texto DD/MM/YYYY
-            df_txt[col_fecha] = fechas_convertidas.dt.strftime('%d/%m/%Y')
+            # Parsear la fecha del TXT forzando lectura DD/MM/YYYY
+            fechas_dt = pd.to_datetime(df_txt[col_fecha], dayfirst=True, errors='coerce')
+            # Formatear como DD/MM/YYYY de forma explícita
+            df_txt[col_fecha] = fechas_dt.dt.strftime('%d/%m/%Y')
 
         # 2. Abrir Excel mediante win32com
         excel = win32.gencache.EnsureDispatch('Excel.Application')
@@ -52,7 +49,7 @@ def procesar_excel_y_github(ruta_txt):
 
         wb = excel.Workbooks.Open(ARCHIVO_EXCEL)
         
-        # Buscar o limpiar Hoja 2
+        # Buscar Hoja 2
         try:
             ws_hoja2 = wb.Worksheets("Hoja2")
         except:
@@ -73,7 +70,15 @@ def procesar_excel_y_github(ruta_txt):
             filas = len(datos)
             columnas = len(datos[0])
             rango_destino = ws_hoja2.Range(ws_hoja2.Cells(2, 1), ws_hoja2.Cells(filas + 1, columnas))
+            
+            # Asignar valores
             rango_destino.Value = datos
+
+            # Forzar el formato de fecha dd/mm/yyyy en Excel
+            if col_fecha:
+                idx_col = df_txt.columns.get_loc(col_fecha) + 1
+                col_rango = ws_hoja2.Range(ws_hoja2.Cells(2, idx_col), ws_hoja2.Cells(filas + 1, idx_col))
+                col_rango.NumberFormat = "dd/mm/yyyy"
 
         print("🔄 Redefiniendo origen de datos y actualizando Tablas Dinámicas en Hoja 1...")
 
@@ -99,13 +104,12 @@ def procesar_excel_y_github(ruta_txt):
 
         print("✅ ¡Tablas dinámicas y datos de Hoja 1/Hoja 2 actualizados al 100%!")
 
-        # 4. Git Pull / Rebase / Add / Commit / Push
+        # 4. Sincronizar con GitHub
         print("🚀 Sincronizando con GitHub...")
         os.chdir(CARPETA_PROYECTO)
 
-        subprocess.run(["git", "pull", "origin", "main", "--rebase"], check=False)
         subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Formato de fechas DD/MM/YYYY corregido"], check=False)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Formato estricto dd/mm/yyyy en Excel y bot_local limpio"], check=False)
         subprocess.run(["git", "push", "origin", "main"], check=True)
 
         print("✅ ¡Publicado con éxito en GitHub!")
