@@ -39,11 +39,10 @@ def procesar_excel_y_github(ruta_txt):
         if col_fecha:
             # Parsear la fecha del TXT forzando lectura DD/MM/YYYY
             fechas_dt = pd.to_datetime(df_txt[col_fecha], dayfirst=True, errors='coerce')
-            # Formatear como DD/MM/YYYY de forma explícita
             df_txt[col_fecha] = fechas_dt.dt.strftime('%d/%m/%Y')
 
-        # 2. Abrir Excel mediante win32com
-        excel = win32.gencache.EnsureDispatch('Excel.Application')
+        # 2. Abrir Excel mediante win32com (Dispatch estándar para evitar errores de gen_py)
+        excel = win32.Dispatch('Excel.Application')
         excel.Visible = False
         excel.DisplayAlerts = False
 
@@ -74,7 +73,7 @@ def procesar_excel_y_github(ruta_txt):
             # Asignar valores
             rango_destino.Value = datos
 
-            # Forzar el formato de fecha dd/mm/yyyy en Excel
+            # Forzar formato de fecha si existe la columna
             if col_fecha:
                 idx_col = df_txt.columns.get_loc(col_fecha) + 1
                 col_rango = ws_hoja2.Range(ws_hoja2.Cells(2, idx_col), ws_hoja2.Cells(filas + 1, idx_col))
@@ -85,15 +84,14 @@ def procesar_excel_y_github(ruta_txt):
         # 3. Actualizar Tablas Dinámicas en Hoja 1
         ws_hoja1 = wb.Worksheets("Hoja1")
         
-        # Determinar nuevo rango de la Hoja 2
         ult_fila = ws_hoja2.UsedRange.Rows.Count
         ult_col = ws_hoja2.UsedRange.Columns.Count
         nuevo_rango = f"'{ws_hoja2.Name}'!R1C1:R{ult_fila}C{ult_col}"
 
-        # Recorrer y actualizar cada tabla dinámica en Hoja 1
+        # Recorrer y actualizar cada tabla dinámica en Hoja 1 (xlDatabase = 1)
         for pt in ws_hoja1.PivotTables():
             try:
-                pt.ChangePivotCache(wb.PivotCaches().Create(SourceType=win32.constants.xlDatabase, SourceData=nuevo_rango))
+                pt.ChangePivotCache(wb.PivotCaches().Create(SourceType=1, SourceData=nuevo_rango))
                 pt.RefreshTable()
             except Exception as e_pt:
                 print(f"Aviso al refrescar tabla dinámica: {e_pt}")
@@ -109,7 +107,8 @@ def procesar_excel_y_github(ruta_txt):
         os.chdir(CARPETA_PROYECTO)
 
         subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Formato estricto dd/mm/yyyy en Excel y bot_local limpio"], check=False)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Datos actualizados y limpieza de bot"], check=False)
+        subprocess.run(["git", "pull", "origin", "main", "--rebase"], check=False)
         subprocess.run(["git", "push", "origin", "main"], check=True)
 
         print("✅ ¡Publicado con éxito en GitHub!")
