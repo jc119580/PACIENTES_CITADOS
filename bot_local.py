@@ -29,6 +29,9 @@ def leer_txt_valido(ruta_txt):
         try:
             df = pd.read_csv(ruta_txt, sep='|', encoding=enc, on_bad_lines='skip', dtype=str)
             df.columns = df.columns.str.strip()
+            # Evitar columnas vacías o sin nombre que rompan la Tabla Dinámica
+            df = df.loc[:, ~df.columns.str.contains('^Unnamed', case=False)]
+            df = df.loc[:, df.columns != '']
             cols_upper = [c.upper() for c in df.columns]
             if any(c in cols_upper for c in ['PERIODO', 'FECHA', 'SUBACTIVIDAD', 'HRAS_PROG', 'CANTPACI_HRA_ATEN']):
                 return df
@@ -39,7 +42,6 @@ def leer_txt_valido(ruta_txt):
 def buscar_txt_citados():
     """Busca el archivo .txt más reciente en Downloads que realmente corresponda al reporte de citados."""
     archivos_txt = glob.glob(os.path.join(CARPETA_DESCARGAS, "*.txt"))
-    # Ordenar del más reciente al más antiguo
     archivos_txt.sort(key=os.path.getmtime, reverse=True)
     for ruta in archivos_txt:
         df = leer_txt_valido(ruta)
@@ -60,7 +62,7 @@ def procesar_excel_y_github(ruta_txt, df_txt):
             r"Ã±": "ñ",
             r"NIÃ['´‘]?O": "NIÑO",
             r"Ã¡": "á", r"Ã©": "é", r"Ã­": "í", r"Ã³": "ó", r"Ãº": "ú",
-            r"Ã": "Á", r"Ã‰": "É", r"Ã": "Í", r"Ã“": "Ó", r"Ãš": "Ú"
+            r"Ã ": "Á", r"Ã‰": "É", r"Ã ": "Í", r"Ã“": "Ó", r"Ãš": "Ú"
         }
         df_txt = df_txt.replace(reemplazos, regex=True)
 
@@ -119,7 +121,7 @@ def procesar_excel_y_github(ruta_txt, df_txt):
         ws_hoja1 = wb.Worksheets("Hoja1")
         
         ult_fila = ws_hoja2.UsedRange.Rows.Count
-        ult_col = ws_hoja2.UsedRange.Columns.Count
+        ult_col = len(df_txt.columns)
         nuevo_rango = f"'{ws_hoja2.Name}'!R1C1:R{ult_fila}C{ult_col}"
 
         for pt in ws_hoja1.PivotTables():
@@ -137,11 +139,11 @@ def procesar_excel_y_github(ruta_txt, df_txt):
 
         print("✅ ¡Excel actualizado!")
 
-        # 3. Sincronizar con GitHub
+        # 3. Sincronizar solo archivos ligeros (sin subir el Excel de 90 MB)
         os.chdir(CARPETA_PROYECTO)
-        subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Limpieza UTF-8 (NIÑO) y fechas Value2"], check=False)
-        subprocess.run(["git", "push", "origin", "main", "--force"], check=True)
+        subprocess.run(["git", "add", "index.html", "bot_local.py"], check=False)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Limpieza UTF-8 (NIÑO)"], check=False)
+        subprocess.run(["git", "push", "origin", "main"], check=False)
 
         return True, "Sincronizado correctamente."
 
