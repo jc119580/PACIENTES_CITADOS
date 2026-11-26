@@ -29,8 +29,8 @@ def fecha_a_numero_excel(dt):
 
 def procesar_excel_y_github(ruta_txt):
     """
-    Lee el TXT e inyecta las fechas como números de serie reales en Excel mediante Value2,
-    impidiendo totalmente que la API COM invierta el día y el mes.
+    Lee el TXT en UTF-8, corrige caracteres (Ñ), inyecta las fechas como números de serie
+    reales en Excel mediante Value2 y actualiza las Tablas Dinámicas.
     """
     try:
         pythoncom.CoInitialize()
@@ -38,9 +38,23 @@ def procesar_excel_y_github(ruta_txt):
         print(f"\n📄 Convertidor activado para: {ruta_txt}")
         print("📊 Desglosando datos e inyectando en la Hoja 2...")
 
-        # 1. Leer el TXT separando por '|'
-        df_txt = pd.read_csv(ruta_txt, sep='|', encoding='latin1', on_bad_lines='skip', dtype=str)
+        # 1. Leer el TXT separando por '|' en UTF-8 (con respaldo a latin1)
+        try:
+            df_txt = pd.read_csv(ruta_txt, sep='|', encoding='utf-8', on_bad_lines='skip', dtype=str)
+        except UnicodeDecodeError:
+            df_txt = pd.read_csv(ruta_txt, sep='|', encoding='latin1', on_bad_lines='skip', dtype=str)
+
         df_txt.columns = df_txt.columns.str.strip()
+
+        # Corregir errores de codificación en Ñ y tildes (ej. NIÃ‘O -> NIÑO)
+        reemplazos = {
+            r"Ã‘": "Ñ",
+            r"Ã±": "ñ",
+            r"NIÃ['´‘]?O": "NIÑO",
+            r"Ã¡": "á", r"Ã©": "é", r"Ã­": "í", r"Ã³": "ó", r"Ãº": "ú",
+            r"Ã": "Á", r"Ã‰": "É", r"Ã": "Í", r"Ã“": "Ó", r"Ãš": "Ú"
+        }
+        df_txt = df_txt.replace(reemplazos, regex=True)
 
         # Identificar la columna de fecha (PERIODO o FECHA)
         col_fecha = None
@@ -80,28 +94,22 @@ def procesar_excel_y_github(ruta_txt):
             # Asignar la matriz de texto general
             rango_destino.Value = datos
 
-            # CORRECCIÓN DE RAÍZ EN EL BACKEND:
             # Reemplazar la columna de fecha por Números de Serie de Excel usando Value2
             if col_fecha:
                 idx_col = df_txt.columns.get_loc(col_fecha) + 1
                 col_rango = ws_hoja2.Range(ws_hoja2.Cells(2, idx_col), ws_hoja2.Cells(filas + 1, idx_col))
-                
-                # Asignar formato de visualización dd/mm/yyyy
                 col_rango.NumberFormat = "dd/mm/yyyy"
 
                 fechas_raw = df_txt[col_fecha].tolist()
                 
-                # Parsear las fechas asegurando lectura Día Primero (dayfirst=True)
                 for i, val in enumerate(fechas_raw, start=2):
                     if val and str(val).strip():
                         try:
-                            # Convertir asegurando que lea DÍA/MES/AÑO
                             dt = pd.to_datetime(str(val).strip(), dayfirst=True, errors='coerce')
                             if pd.notnull(dt):
                                 num_excel = fecha_a_numero_excel(dt)
-                                # Asignar mediante Value2 evita cualquier reinterpretación por texto
                                 ws_hoja2.Cells(i, idx_col).Value2 = num_excel
-                        except Exception as e_f:
+                        except Exception:
                             pass
 
         print("🔄 Redefiniendo origen de datos y actualizando Tablas Dinámicas en Hoja 1...")
@@ -131,7 +139,7 @@ def procesar_excel_y_github(ruta_txt):
         os.chdir(CARPETA_PROYECTO)
 
         subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", "Auto-update: Insercion de fechas via Value2 (Numero de Serie)"], check=False)
+        subprocess.run(["git", "commit", "-m", "Auto-update: Insercion de fechas via Value2 y limpieza UTF-8"], check=False)
         subprocess.run(["git", "push", "origin", "main", "--force"], check=True)
 
         print("✅ ¡Publicado con éxito en GitHub!")
@@ -151,8 +159,10 @@ def sincronizar():
     print("\n--------------------------------------------------")
     print("🔄 Petición de sincronización recibida...")
 
-    patron = os.path.join(CARPETA_DESCARGAS, "*.txt")
-    archivos_txt = glob.glob(patron)
+    # Prioriza los archivos del reporte HrasEfect para evitar tomar otros .txt de Descargas
+    archivos_txt = glob.glob(os.path.join(CARPETA_DESCARGAS, "*HrasEfect*.txt"))
+    if not archivos_txt:
+        archivos_txt = glob.glob(os.path.join(CARPETA_DESCARGAS, "*.txt"))
 
     if not archivos_txt:
         return jsonify({"error": "No se encontraron archivos .txt en Downloads"}), 400
